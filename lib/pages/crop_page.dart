@@ -1,0 +1,93 @@
+import 'package:flutter/material.dart';
+import 'package:video_editor/video_editor.dart';
+
+class CropPage extends StatefulWidget {
+  final VideoEditorController controller;
+  const CropPage({super.key, required this.controller});
+  @override
+  State<CropPage> createState() => _CropPageState();
+}
+
+class _CropPageState extends State<CropPage> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0, // Remove shadow
+        title: const Text("Crop Video"),
+        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.check),
+            onPressed: () {
+              // Apply the crop changes
+              widget.controller.applyCacheCrop();
+              Navigator.pop(context);
+            },
+            tooltip: 'Apply crop',
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(padding: const EdgeInsets.all(30), child: CropGridViewer.edit(controller: widget.controller, rotateCropArea: false)),
+            ),
+            Padding(padding: const EdgeInsets.symmetric(vertical: 15.0), child: _buildRatioButtons()),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRatioButtons() {
+    final Map<String, double?> ratios = {
+      'Free': null,
+      'Original': widget.controller.video.value.aspectRatio == 0 ? null : widget.controller.video.value.aspectRatio,
+      '1:1': 1.0,
+      '16:9': 16 / 9,
+      '9:16': 9 / 16,
+      '4:3': 4 / 3,
+      '3:4': 3 / 4,
+    };
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10.0,
+      runSpacing: 5.0,
+      children:
+          ratios.entries.map((entry) {
+            final String label = entry.key;
+            final double? value = entry.value;
+            final bool isSelected =
+                (widget.controller.preferredCropAspectRatio == null && value == null) ||
+                (widget.controller.preferredCropAspectRatio != null &&
+                    value != null &&
+                    (widget.controller.preferredCropAspectRatio! - value).abs() < 0.01);
+            return Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    widget.controller.preferredCropAspectRatio = value;
+                  });
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.orange.withOpacity(0.8) : Colors.black.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: isSelected ? Colors.orange : Colors.grey[700]!, width: 1.5),
+                  ),
+                  child: Text(label, style: TextStyle(color: Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                ),
+              ),
+            );
+          }).toList(),
+    );
+  }
+}

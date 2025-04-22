@@ -1,0 +1,57 @@
+name: local_send_plus
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.7.2 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^2.5.1
+  http: ^1.2.2
+  network_info_plus: ^6.1.3
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
+  shelf_multipart: ^2.0.1
+  mime: ^2.0.0
+  file_picker: ^8.0.1
+  permission_handler: ^11.4.0
+  path_provider: ^2.1.3
+  device_info_plus: ^11.3.3
+  image_editor_plus: ^1.0.6
+  uuid: ^4.4.2
+  basic_utils: ^5.8.2
+  image: ^4.5.4
+  flutter_video_thumbnail_plus: ^1.0.5
+  image_gallery_saver_plus: ^4.0.1
+  shared_preferences: ^2.2.4
+  video_editor: ^3.0.0
+  image_picker: ^1.0.7
+  path: ^1.9.1
+  ffmpeg_kit_flutter_new: ^1.1.0
+  clipboard: ^0.1.3
+  flutter_link_previewer: ^3.2.2
+  local_auth: ^2.3.0
+  flutter_gemma: ^0.8.4
+  flutter_markdown: ^0.7.1 # Added for AI Chat feature
+  dio: ^5.8.0+1
+  flutter_chat_types: ^3.6.2
+dependency_overrides:
+  video_thumbnail:
+    git:
+      url: https://github.com/ahmedzayan7920/video_thumbnail.git
+      ref: fix/add-namespace
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/models/gemma3-1b-it-int4.task
