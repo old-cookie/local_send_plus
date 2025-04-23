@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
-import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // For HapticFeedback
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_send_plus/providers/settings_provider.dart' hide sharedPreferencesProvider; 
 import 'package:file_picker/file_picker.dart';
 import 'package:local_send_plus/main.dart'; // Import main for themeModeNotifierProvider
-import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 
 // Helper for haptic feedback
 void selectionHaptic() {
