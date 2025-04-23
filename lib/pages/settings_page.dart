@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_send_plus/providers/settings_provider.dart';
@@ -90,15 +91,16 @@ class SettingsPage extends ConsumerWidget {
             },
           ),
           const Divider(),
-          SwitchListTile(
-            secondary: const Icon(Icons.fingerprint),
-            title: const Text('Use Biometric Authentication'),
-            subtitle: const Text('Require fingerprint/face ID to open the app'),
-            value: useBiometricAuth,
-            onChanged: (bool value) {
-              ref.read(biometricAuthProvider.notifier).setBiometricAuth(value);
-            },
-          ),
+          if (!kIsWeb)
+            SwitchListTile(
+              secondary: const Icon(Icons.fingerprint),
+              title: const Text('Use Biometric Authentication'),
+              subtitle: const Text('Require fingerprint/face ID to open the app'),
+              value: useBiometricAuth,
+              onChanged: (bool value) {
+                ref.read(biometricAuthProvider.notifier).setBiometricAuth(value);
+              },
+            ),
           const Divider(),
         ],
       ),

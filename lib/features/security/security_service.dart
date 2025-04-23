@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
@@ -21,6 +22,12 @@ class SecurityService {
 
   Future<Map<String, dynamic>> authenticateWithBiometrics(String localizedReason) async {
     Map<String, dynamic> result = {'success': false, 'errorCode': errorUnknown, 'errorMessage': 'An unknown error occurred.'};
+    if (kIsWeb) {
+      print('Biometric authentication is not available on the web.');
+      result['errorCode'] = errorNotAvailable;
+      result['errorMessage'] = 'Biometric authentication is not available on the web.';
+      return result;
+    }
     try {
       final bool deviceSupported = await _localAuth.isDeviceSupported();
       if (!deviceSupported) {

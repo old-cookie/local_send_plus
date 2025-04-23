@@ -39,6 +39,11 @@ dependencies:
   flutter_markdown: ^0.7.1 # Added for AI Chat feature
   dio: ^5.8.0+1
   flutter_chat_types: ^3.6.2
+  universal_html: ^2.2.4
+  pretty_qr_code: ^3.4.0
+  mobile_scanner: ^6.0.10
+  get_ip_address: ^0.0.7
+
 dependency_overrides:
   video_thumbnail:
     git:

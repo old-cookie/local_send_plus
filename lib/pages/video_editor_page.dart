@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:video_editor/video_editor.dart';
 import 'crop_page.dart';
@@ -20,6 +21,21 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   @override
   void initState() {
     super.initState();
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video editing is not supported on the web.')));
+        }
+      });
+      _controller = VideoEditorController.file(
+        File('dummy_path'), // Provide a dummy path
+        minDuration: const Duration(seconds: 1),
+        maxDuration: const Duration(seconds: 30),
+      );
+      // Skip the rest of initialization for web
+      return;
+    }
     _controller = VideoEditorController.file(widget.file, minDuration: const Duration(seconds: 1), maxDuration: const Duration(seconds: 30));
     _controller.initialize(aspectRatio: 9 / 16).then((_) => setState(() {})).catchError((error) {
       if (mounted) {

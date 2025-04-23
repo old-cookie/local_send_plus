@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io'; // Keep standard dart:io import
+import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_send_plus/features/receive/received_file_provider.dart';
 import 'package:local_send_plus/features/receive/received_text_provider.dart';
@@ -35,11 +36,18 @@ class ServerService {
       print('Starting HTTP server...');
       const int fixedPort = 2706;
       print('Starting HTTP server on fixed port $fixedPort...');
-      _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, fixedPort);
-      print('HTTP Server started');
-      final actualPort = _server!.port;
-      print('Server listening on port $actualPort (HTTP only)');
-      _ref.read(serverStateProvider.notifier).setRunning(actualPort);
+      int? actualPort; // Declare here, nullable
+      if (!kIsWeb) {
+        _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, fixedPort);
+        print('HTTP Server started');
+        actualPort = _server!.port; // Assign here
+        print('Server listening on port $actualPort (HTTP only)');
+        _ref.read(serverStateProvider.notifier).setRunning(actualPort);
+      } else {
+        print('Warning: Full HTTP server functionality is not available on the web platform.');
+        _ref.read(serverStateProvider.notifier).setError('Server not supported on web');
+        return;
+      }
     } catch (e) {
       print('Error starting server: $e');
       _ref.read(serverStateProvider.notifier).setError(e.toString());
@@ -58,7 +66,8 @@ class ServerService {
 
   int? get runningPort => _server?.port;
   Future<Response> _handleInfoRequest(Request request) async {
-    final deviceInfo = {'alias': 'MyDevice', 'version': '1.0.0', 'deviceModel': Platform.operatingSystem, 'https': false};
+    final deviceModel = kIsWeb ? 'web' : Platform.operatingSystem;
+    final deviceInfo = {'alias': 'MyDevice', 'version': '1.0.0', 'deviceModel': deviceModel, 'https': false};
     return Response.ok(jsonEncode(deviceInfo), headers: {'Content-Type': 'application/json'});
   }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:video_editor/video_editor.dart';
 
@@ -10,7 +11,23 @@ class CropPage extends StatefulWidget {
 
 class _CropPageState extends State<CropPage> {
   @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video cropping is not supported on the web.')));
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator()));
+    }
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(

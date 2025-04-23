@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_send_plus/features/discovery/discovery_provider.dart';
 import 'package:local_send_plus/models/device_info.dart';
@@ -22,10 +23,14 @@ class DiscoveryService {
   final String _multicastAddress = '224.0.0.1';
   DiscoveryService(this._ref);
   Future<void> startDiscovery() async {
+    if (kIsWeb) {
+      print('Discovery service is not supported on the web platform.');
+      return;
+    }
     if (_isDiscovering) return;
-    const int listenPort = 2706; // Use fixed port
+    const int listenPort = 2706;
     await _updateLocalIPs();
-    if (_localIPs.isEmpty) {
+    if (_localIPs.isEmpty && !kIsWeb) {
       print("Warning: Could not determine local IP addresses. Self-discovery filtering might not work.");
     }
     try {
@@ -62,7 +67,7 @@ class DiscoveryService {
   Future<void> stopDiscovery() async {
     if (!_isDiscovering && _socket == null && _discoveryTimer == null) return;
     print('Stopping discovery...');
-    _isDiscovering = false;
+    _isDiscovering = false; // Ensure state is updated regardless of platform
     _discoveryTimer?.cancel();
     _discoveryTimer = null;
     _socket?.close();
@@ -122,6 +127,11 @@ class DiscoveryService {
   }
 
   Future<void> _updateLocalIPs() async {
+    if (kIsWeb) {
+      _localIPs.clear(); // Ensure it's empty on web
+      print("Local IP address fetching is not supported on the web platform.");
+      return;
+    }
     _localIPs.clear();
     try {
       for (var interface in await NetworkInterface.list(includeLoopback: false, type: InternetAddressType.IPv4)) {
@@ -132,6 +142,7 @@ class DiscoveryService {
       print("Local IPs updated: $_localIPs");
     } catch (e) {
       print("Error fetching local IPs: $e");
+      _localIPs.clear();
     }
   }
 }

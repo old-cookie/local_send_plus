@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:local_send_plus/features/receive/received_file_provider.dart';
 import 'package:local_send_plus/models/received_file_info.dart';
+import 'package:universal_html/html.dart' as html;
 import 'package:mime/mime.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_video_thumbnail_plus/flutter_video_thumbnail_plus.dart';
@@ -94,43 +96,64 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
   }
 
   Future<void> _keepFile(BuildContext context) async {
-    String message = 'File "${widget.fileInfo.filename}" kept in Downloads.';
+    String message = 'File "${widget.fileInfo.filename}" kept.';
     bool deleteOriginal = false;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     try {
-      print('Keep action: Detected MIME type: $_mimeType for ${widget.fileInfo.filename}');
-      if (_mimeType != null && (_mimeType!.startsWith('image/') || _mimeType!.startsWith('video/'))) {
-        print('Attempting to save ${widget.fileInfo.filename} to gallery...');
-        final result = await ImageGallerySaverPlus.saveFile(widget.fileInfo.path);
-        print('Gallery save result: $result');
-        if (result != null && result['isSuccess'] == true) {
-          message = '${_mimeType!.startsWith('image/') ? 'Photo' : 'Video'} "${widget.fileInfo.filename}" saved to gallery.';
+      if (kIsWeb) {
+        print('Web platform detected. Attempting browser download for ${widget.fileInfo.filename}');
+        final file = File(widget.fileInfo.path);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final blob = html.Blob([bytes], _mimeType);
+          final url = html.Url.createObjectUrlFromBlob(blob);
+          html.Url.revokeObjectUrl(url);
+          message = 'Downloading "${widget.fileInfo.filename}"...';
           deleteOriginal = true;
+          print('Browser download initiated for ${widget.fileInfo.filename}');
         } else {
-          message = 'Failed to save "${widget.fileInfo.filename}" to gallery. Kept in Downloads.';
-          print('Gallery save failed or returned unexpected result: $result');
+          message = 'Error: File not found for download.';
+          print('File not found for web download: ${widget.fileInfo.path}');
         }
       } else {
-        print('File type ($_mimeType) is not an image or video. Keeping in Downloads.');
+        // Native platforms: Use ImageGallerySaverPlus or keep in temp location
+        print('Native platform detected. Keep action for ${widget.fileInfo.filename}');
+        message = 'File "${widget.fileInfo.filename}" kept in temporary location.'; // Default message
+        if (_mimeType != null && (_mimeType!.startsWith('image/') || _mimeType!.startsWith('video/'))) {
+          print('Attempting to save ${widget.fileInfo.filename} to gallery...');
+          final result = await ImageGallerySaverPlus.saveFile(widget.fileInfo.path);
+          print('Gallery save result: $result');
+          if (result != null && result['isSuccess'] == true) {
+            message = '${_mimeType!.startsWith('image/') ? 'Photo' : 'Video'} "${widget.fileInfo.filename}" saved to gallery.';
+            deleteOriginal = true; // Delete original if saved to gallery
+          } else {
+            message = 'Failed to save "${widget.fileInfo.filename}" to gallery. Kept in temporary location.';
+            print('Gallery save failed or returned unexpected result: $result');
+          }
+        } else {
+          print('File type ($_mimeType) is not an image or video. Keeping in temporary location.');
+        }
       }
       if (deleteOriginal) {
         try {
           final originalFile = File(widget.fileInfo.path);
           if (await originalFile.exists()) {
             await originalFile.delete();
-            print('Deleted original file from Downloads: ${widget.fileInfo.path}');
+            print('Deleted temporary file: ${widget.fileInfo.path}');
           }
         } catch (e) {
-          print('Error deleting original file ${widget.fileInfo.path} after saving to gallery: $e');
+          print('Error deleting temporary file ${widget.fileInfo.path}: $e');
         }
       }
     } catch (e) {
       print('Error during keep/save operation for ${widget.fileInfo.path}: $e');
-      message = 'Error processing file: $e. Kept in Downloads.';
+      message = 'Error processing file: $e.';
     } finally {
       ref.read(receivedFileProvider.notifier).clearReceivedFile();
       if (context.mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        navigator.pop();
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text(message)));
       }
     }
   }
