@@ -1,7 +1,7 @@
 name: local_send_plus
 description: "A new Flutter project."
 publish_to: 'none'
-version: 1.0.0+1
+version: 2.0.0+1
 
 environment:
   sdk: '>=3.7.2 <4.0.0'
@@ -36,13 +36,12 @@ dependencies:
   flutter_link_previewer: ^3.2.2
   local_auth: ^2.3.0
   flutter_gemma: ^0.8.4
-  flutter_markdown: ^0.7.1 # Added for AI Chat feature
+  flutter_markdown: ^0.7.1
   dio: ^5.8.0+1
   flutter_chat_types: ^3.6.2
   universal_html: ^2.2.4
   pretty_qr_code: ^3.4.0
   mobile_scanner: ^6.0.10
-  get_ip_address: ^0.0.7
 
 dependency_overrides:
   video_thumbnail:

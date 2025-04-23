@@ -1,0 +1,104 @@
+name: Flutter CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Install dependencies
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y curl git unzip xz-utils libglu1-mesa
+
+      # Step 3: Set up Flutter
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.29.2"
+
+      # Step 4: Cache Flutter build artifacts
+      - name: Cache Flutter build artifacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pub-cache
+            ${{ github.workspace }}/.dart_tool
+          key: ${{ runner.os }}-flutter-${{ hashFiles('pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      # Step 5: Install dependencies
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Step 7: Build APK
+      - name: Build APK
+        run: flutter build apk --release
+
+      # Step 8: Upload Artifacts
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Releases
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+
+      # Step 8: Extract Version
+      - name: Extract version from pubspec.yaml
+        id: extract_version
+        run: |
+          version=$(grep '^version: ' pubspec.yaml | cut -d ' ' -f 2 | tr -d '\r')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      # Step 9: Check if Tag Exists
+      - name: Check if Tag Exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
+            echo "TAG_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "TAG_EXISTS=false" >> $GITHUB_ENV
+          fi
+        shell: bash
+        env:
+          FLUTTER_ROOT: /opt/hostedtoolcache/flutter/stable-3.27.4-x64
+          PUB_CACHE: /home/runner/.pub-cache
+          VERSION: ${{ env.VERSION }}
+
+      - run: flutter build web
+      - name: Zip web build
+        run: |
+          cd build/web
+          zip -r ../web.zip .
+          cd ../..
+
+      # Step 10: Create Release
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "build/app/outputs/flutter-apk/app-release.apk,build/web.zip"
+          tag: v${{ steps.extract_version.outputs.version }}
+          generateReleaseNotes: false
+          makeLatest: legacy
+          omitBody: false
+          omitBodyDuringUpdate: false
+          omitDraftDuringUpdate: false
+          omitName: false
+          omitNameDuringUpdate: false
+          omitPrereleaseDuringUpdate: false
+          removeArtifacts: false
+          replacesArtifacts: true
+          skipIfReleaseExists: false
+          token: ${{ secrets.GITHUB_TOKEN }}

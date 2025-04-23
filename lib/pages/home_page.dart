@@ -31,10 +31,10 @@ import 'package:ffmpeg_kit_flutter_new/statistics.dart';
 import 'package:local_send_plus/pages/settings_page.dart';
 import 'package:local_send_plus/features/ai_chat/chat_screen.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:local_send_plus/providers/settings_provider.dart'; // To get alias
-import 'package:local_send_plus/features/server/server_provider.dart'; // To get server state (Port)
-import 'package:network_info_plus/network_info_plus.dart'; // To get local IP
+import 'package:local_send_plus/providers/settings_provider.dart';
+import 'package:local_send_plus/features/server/server_provider.dart';
+import 'package:network_info_plus/network_info_plus.dart';
+import 'package:local_send_plus/pages/qr_scanner_page.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -42,7 +42,7 @@ class HomePage extends ConsumerStatefulWidget {
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver { // Add WidgetsBindingObserver
+class _HomePageState extends ConsumerState<HomePage> {
   String? _selectedFilePath;
   String? _selectedFileName;
   Uint8List? _selectedFileBytes;
@@ -56,18 +56,14 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
   StreamSubscription? _receivedTextSubscription;
   DiscoveryService? _discoveryService;
   ServerService? _serverService;
-  final MobileScannerController _scannerController = MobileScannerController(
-    // Configure scanner options if needed, e.g., formats: [BarcodeFormat.qrCode]
-  );
-  StreamSubscription<BarcodeCapture>? _barcodeSubscription; // For scanner results
-  String? _localIpAddress; // State variable for local IP
+  String? _localIpAddress;
+  String? _scanResult;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); // Register observer
     _loadFavorites();
-    _fetchLocalIp(); // Fetch local IP on init
+    _fetchLocalIp();
     Future.microtask(() async {
       if (!mounted) return;
       final localRef = ref;
@@ -131,46 +127,10 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     _ipController.dispose();
     _nameController.dispose();
     _textController.dispose();
-    _barcodeSubscription?.cancel(); // Cancel scanner subscription
-    _scannerController.dispose(); // Dispose scanner controller
-    WidgetsBinding.instance.removeObserver(this); // Remove observer
     super.dispose();
   }
-
-  // Add App Lifecycle State Handler for Scanner
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    // If the controller is not ready or has no permission, do not try to start or stop it.
-    if (!_scannerController.value.isInitialized || !_scannerController.value.hasCameraPermission) {
-      return;
-    }
-
-    switch (state) {
-      case AppLifecycleState.detached:
-      case AppLifecycleState.hidden:
-      case AppLifecycleState.paused:
-        _barcodeSubscription?.pause(); // Pause subscription
-        _scannerController.stop(); // Stop scanner
-        break;
-      case AppLifecycleState.resumed:
-        _barcodeSubscription?.resume(); // Resume subscription
-        _scannerController.start(); // Start scanner
-        break;
-      case AppLifecycleState.inactive:
-        // Stop the scanner when the app is paused.
-        // Also stop the barcode events subscription.
-        _barcodeSubscription?.cancel();
-        _barcodeSubscription = null;
-        _scannerController.stop();
-        break;
-    }
-    // This closing brace was misplaced, it belongs at the end of the class
-  }
-
-  // Method to fetch local IP
   Future<void> _fetchLocalIp() async {
-    if (kIsWeb) return; // NetworkInfoPlus not available on web
+    if (kIsWeb) return;
     try {
       final ip = await NetworkInfo().getWifiIP();
       if (mounted) {
@@ -181,7 +141,6 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     } catch (e) {
       print("Failed to get local IP: $e");
       if (mounted) {
-        // Optionally show an error to the user
       }
     }
   }
@@ -340,39 +299,33 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     Widget thumbnailWidget;
     if (isImage) {
       if (_selectedFileBytes != null) {
-        // Prioritize bytes for images
         thumbnailWidget = Image.memory(_selectedFileBytes!, fit: BoxFit.cover);
       } else if (!kIsWeb && _selectedFilePath != null) {
-        // Use path only on native if bytes are null
         thumbnailWidget = Image.file(File(_selectedFilePath!), fit: BoxFit.cover);
       } else {
-        // Fallback icon if no bytes and (on web or no path)
         thumbnailWidget = const Icon(Icons.image_not_supported, size: 50);
       }
     } else if (isVideo) {
       if (!kIsWeb && _selectedFilePath != null) {
-        // Generate video thumbnail only on native with a path
         thumbnailWidget = FutureBuilder<Uint8List?>(
           future: FlutterVideoThumbnailPlus.thumbnailData(video: _selectedFilePath!, imageFormat: ImageFormat.jpeg, maxWidth: 150, quality: 25),
           builder: (BuildContext context, AsyncSnapshot<Uint8List?> snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            print('Error generating video thumbnail: ${snapshot.error}');
-            return const Icon(Icons.video_file_outlined, size: 50);
-          } else if (snapshot.hasData && snapshot.data != null) {
-            return Image.memory(snapshot.data!, fit: BoxFit.cover);
-          } else {
-            return const Icon(Icons.video_file_outlined, size: 50);
-          }
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            } else if (snapshot.hasError) {
+              print('Error generating video thumbnail: ${snapshot.error}');
+              return const Icon(Icons.video_file_outlined, size: 50);
+            } else if (snapshot.hasData && snapshot.data != null) {
+              return Image.memory(snapshot.data!, fit: BoxFit.cover);
+            } else {
+              return const Icon(Icons.video_file_outlined, size: 50);
+            }
           },
         );
       } else {
-        // Show generic video icon on web or if path is unavailable on native
         thumbnailWidget = const Icon(Icons.video_file_outlined, size: 50);
       }
     } else {
-      // Generic file icon for other types
       thumbnailWidget = const Icon(Icons.insert_drive_file_outlined, size: 50);
     }
     return Padding(
@@ -397,18 +350,11 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     final List<DeviceInfo> discoveredDevices = ref.watch(discoveredDevicesProvider);
-    final alias = ref.watch(deviceAliasProvider); // Get alias
-    final serverState = ref.watch(serverStateProvider); // Get server state (port, isRunning)
-
-    // Prepare data for QR code
+    final alias = ref.watch(deviceAliasProvider);
+    final serverState = ref.watch(serverStateProvider);
     String? qrData;
-    // Use the fetched _localIpAddress and port from serverState
     if (serverState.isRunning && serverState.port != null && _localIpAddress != null) {
-      final qrInfo = {
-        'ip': _localIpAddress,
-        'port': serverState.port,
-        'alias': alias,
-      };
+      final qrInfo = {'ip': _localIpAddress, 'port': serverState.port, 'alias': alias};
       qrData = jsonEncode(qrInfo);
     }
 
@@ -417,23 +363,6 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         title: const Text('LocalSend Plus'),
         actions: [
           IconButton(icon: const Icon(Icons.star), onPressed: _showFavoritesDialog, tooltip: 'Show Favorites'),
-          if (!kIsWeb) // Hide AI Chat button on web
-            IconButton(
-              icon: const Icon(Icons.chat_bubble_outline),
-              onPressed: () {
-              if (!mounted) return;
-              Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen()));
-            },
-            tooltip: 'AI Chat',
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              if (!mounted) return;
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()));
-            },
-            tooltip: 'Settings',
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
@@ -442,27 +371,56 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
             },
             tooltip: 'Refresh Devices',
           ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'More Options',
+            onSelected: (String result) {
+              switch (result) {
+                case 'scan_qr':
+                  _scanQrCode();
+                  break;
+                case 'ai_chat':
+                  if (!mounted) return;
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen()));
+                  break;
+                case 'settings':
+                  if (!mounted) return;
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()));
+                  break;
+              }
+            },
+            itemBuilder:
+                (BuildContext context) => <PopupMenuEntry<String>>[
+                  if (!kIsWeb)
+                    const PopupMenuItem<String>(value: 'scan_qr', child: ListTile(leading: Icon(Icons.qr_code_scanner), title: Text('Scan QR'))),
+                  if (!kIsWeb)
+                    const PopupMenuItem<String>(value: 'ai_chat', child: ListTile(leading: Icon(Icons.chat_bubble_outline), title: Text('AI Chat'))),
+                  const PopupMenuItem<String>(value: 'settings', child: ListTile(leading: Icon(Icons.settings), title: Text('Settings'))),
+                ],
+          ),
         ],
       ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Column( // Wrap Row in Column to add QR code above
+            child: Column(
               children: [
-                // QR Code Display
                 if (qrData != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16.0),
                     child: Center(
-                      child: SizedBox(
-                        width: 150, // Adjust size as needed
-                        height: 150,
-                        child: PrettyQrView.data(
-                          data: qrData,
-                          decoration: const PrettyQrDecoration(
-                            shape: PrettyQrSmoothSymbol(color: Colors.black), // Or PrettyQrRoundedSymbol
-                            // image: PrettyQrDecorationImage(image: AssetImage('assets/your_logo.png')), // Optional logo
+                      child: Container(
+                        color: Colors.white,
+                        padding: const EdgeInsets.all(8.0),
+                        child: SizedBox(
+                          width: 150,
+                          height: 150,
+                          child: PrettyQrView.data(
+                            data: qrData,
+                            decoration: const PrettyQrDecoration(
+                              shape: PrettyQrSmoothSymbol(color: Colors.black),
+                            ),
                           ),
                         ),
                       ),
@@ -473,16 +431,10 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                     Expanded(
                       child: TextField(
                         controller: _textController,
-                        maxLines: null, // Allow multiple lines
-                        decoration: InputDecoration(
+                        maxLines: null,
+                        decoration: const InputDecoration(
                           labelText: 'Enter Text to Send',
-                          border: const OutlineInputBorder(),
-                          // Add Scan button conditionally
-                          suffixIcon: !kIsWeb ? IconButton(
-                            icon: const Icon(Icons.qr_code_scanner),
-                            tooltip: 'Scan QR Code',
-                            onPressed: _scanQrCode,
-                          ) : null,
+                          border: OutlineInputBorder(),
                         ),
                       ),
                     ),
@@ -681,12 +633,9 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
   Future<void> _pickFile(BuildContext context, FileType fileType) async {
     bool permissionGranted = false;
     String? permissionTypeDenied;
-
-    // Web doesn't use dart:io or permission_handler in the same way
     if (kIsWeb) {
-      permissionGranted = true; // Assume browser handles permissions
+      permissionGranted = true;
     } else {
-      // Existing Android/iOS permission logic
       if (Platform.isAndroid) {
         if (!mounted) return;
         final androidInfo = await DeviceInfoPlugin().androidInfo;
@@ -711,7 +660,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
             permissionTypeDenied = statuses.entries.firstWhere((entry) => !entry.value.isGranted).key.toString().split('.').last;
           }
         }
-      } else { // Assume iOS or other non-Android native platform
+      } else {
         if (fileType == FileType.image || fileType == FileType.video) {
           if (!mounted) return;
           var status = await Permission.photos.request();
@@ -741,16 +690,14 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       if (!mounted) return;
       if (result != null && result.files.isNotEmpty) {
         PlatformFile file = result.files.single;
-        // --- Logging added ---
         print('FilePicker result on ${kIsWeb ? "Web" : "Native"}:');
         print('  Name: ${file.name}');
-        print('  Path: ${kIsWeb ? "N/A (Web)" : file.path}'); // Log path conditionally
+        print('  Path: ${kIsWeb ? "N/A (Web)" : file.path}');
         print('  Bytes length: ${file.bytes?.length}');
-        // --- End logging ---
         final String fileName = file.name;
         final Uint8List? fileBytes = file.bytes;
-        final String? filePath = kIsWeb ? null : file.path; // Use null path on web
-        if (fileType == FileType.image && (fileBytes != null || (!kIsWeb && filePath != null))) { // Check filePath only if not on web
+        final String? filePath = kIsWeb ? null : file.path;
+        if (fileType == FileType.image && (fileBytes != null || (!kIsWeb && filePath != null))) {
           if (!mounted) return;
           showDialog(
             context: context,
@@ -764,7 +711,6 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                     onPressed: () {
                       Navigator.of(dialogContext).pop();
                       if (!mounted) return;
-                      // Pass null for path on web
                       _navigateToEditor(bytes: fileBytes, path: kIsWeb ? null : filePath, fileName: fileName);
                     },
                   ),
@@ -780,7 +726,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
               );
             },
           );
-        } else if (fileType == FileType.video && (fileBytes != null || (!kIsWeb && filePath != null))) { // Check filePath only if not on web
+        } else if (fileType == FileType.video && (fileBytes != null || (!kIsWeb && filePath != null))) {
           if (!mounted) return;
           showDialog(
             context: context,
@@ -790,13 +736,14 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                 content: const Text('Do you want to edit the video before sending?'),
                 actions: <Widget>[
                   TextButton(
-                    // Disable Edit Video button on web
-                    onPressed: kIsWeb ? null : () {
-                      Navigator.of(dialogContext).pop();
-                      if (!mounted) return;
-                      // Pass null for path on web
-                      _navigateToVideoEditor(bytes: fileBytes, path: kIsWeb ? null : filePath, fileName: fileName);
-                    },
+                    onPressed:
+                        kIsWeb
+                            ? null
+                            : () {
+                              Navigator.of(dialogContext).pop();
+                              if (!mounted) return;
+                              _navigateToVideoEditor(bytes: fileBytes, path: kIsWeb ? null : filePath, fileName: fileName);
+                            },
                     child: Text('Edit Video', style: TextStyle(color: kIsWeb ? Colors.grey : null)),
                   ),
                   TextButton(
@@ -812,13 +759,10 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
             },
           );
         } else if (fileBytes != null) {
-          // Prioritize bytes on web
           _setPickedFile(bytes: fileBytes, path: null, name: fileName);
         } else if (!kIsWeb && filePath != null) {
-          // Use path only if not on web and bytes are null
           _setPickedFile(bytes: null, path: filePath, name: fileName);
         } else if (kIsWeb && filePath != null) {
-          // If on web and somehow only path is available (shouldn't happen with withData: true), log error.
           print('File picking error on Web: Only path is available, but bytes are required.');
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to access selected file data.')));
@@ -839,14 +783,12 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
 
   Future<void> _navigateToEditor({Uint8List? bytes, String? path, required String fileName}) async {
     Uint8List? imageBytes = bytes;
-    // On web, path is null. If bytes are also null, we can't proceed.
     if (kIsWeb && imageBytes == null) {
       print('Error: Cannot edit image on web without image bytes.');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot edit photo: Image data not available.')));
       return;
     }
-    // On native, try reading from path if bytes are null.
     if (!kIsWeb && imageBytes == null && path != null) {
       try {
         if (!mounted) return;
@@ -884,7 +826,6 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
   }
 
   Future<void> _navigateToVideoEditor({Uint8List? bytes, String? path, required String fileName}) async {
-    // Safeguard: Prevent execution on web
     if (kIsWeb) {
       print('Video editing is not supported on the web.');
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video editing is not supported on the web.')));
@@ -918,7 +859,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       return;
     }
     if (!mounted) return;
-    final File videoFile = File(videoPath!);
+    final File videoFile = File(videoPath);
     if (!mounted) {
       setState(() {
         _isSending = false;
@@ -1004,165 +945,73 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Selected: $name. Tap a device to send.')));
   }
 
-  // Method to show the QR Code Scanner
   Future<void> _scanQrCode() async {
-    // Request camera permission first
-    if (!kIsWeb) {
-      var status = await Permission.camera.request();
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('QR Code scanning via camera is not supported on web.')));
+      return;
+    }
+    try {
+      final String? scanResult = await Navigator.push<String>(context, MaterialPageRoute(builder: (context) => const QrScannerPage()));
       if (!mounted) return;
-      if (!status.isGranted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Camera permission is required to scan QR codes.')));
+      if (scanResult == null) {
+        print('QR Code scan cancelled or failed.');
         return;
       }
-    }
-
-    // Cancel any existing subscription and stop controller before starting a new scan
-    await _barcodeSubscription?.cancel();
-    _barcodeSubscription = null;
-    if (_scannerController.value.isRunning) {
-       await _scannerController.stop();
-    }
-
-    if (!mounted) return;
-
-    // Start listening to the stream *before* showing the dialog
-    _barcodeSubscription = _scannerController.barcodes.listen(_handleBarcode);
-
-    // Start the scanner controller
-    try {
-      await _scannerController.start();
-    } catch (e) {
-      print("Error starting scanner: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error starting scanner: $e')));
-      }
-      await _barcodeSubscription?.cancel(); // Clean up listener on error
-      _barcodeSubscription = null;
-      return; // Don't show dialog if scanner failed to start
-    }
-
-    if (!mounted) return; // Check again after async gap
-
-    // Show scanner in a dialog
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Scan QR Code'),
-        content: SizedBox(
-          width: 300, // Adjust size as needed
-          height: 300,
-          child: MobileScanner(
-            controller: _scannerController,
-            // onDetect: _handleBarcode, // Use stream listener instead
-          ),
-        ),
-        actions: [
-          TextButton(
-            child: const Text('Cancel'),
-            onPressed: () {
-               Navigator.of(context).pop();
-               // Stop scanner and listener when dialog is manually closed
-               _barcodeSubscription?.cancel();
-               _barcodeSubscription = null;
-               if (_scannerController.value.isRunning) {
-                 _scannerController.stop();
-               }
-            }
-          ),
-        ],
-      ),
-    ).then((_) {
-      // This block executes when the dialog is popped (either by Navigator.pop or by _handleBarcode)
-      // Ensure scanner and listener are stopped if dialog is dismissed externally
-      if (_barcodeSubscription != null) {
-        _barcodeSubscription?.cancel();
-        _barcodeSubscription = null;
-      }
-      if (_scannerController.value.isRunning) {
-        _scannerController.stop();
-      }
-    });
-  }
-
-  // Method to handle detected barcodes
-  void _handleBarcode(BarcodeCapture capture) {
-    final List<Barcode> barcodes = capture.barcodes;
-    if (barcodes.isNotEmpty) {
-      final String? scannedData = barcodes.first.rawValue;
-      if (scannedData != null) {
-        print('QR Code Scanned: $scannedData');
-        // Stop scanning and listener FIRST
-        _barcodeSubscription?.cancel();
-        _barcodeSubscription = null;
-        if (_scannerController.value.isRunning) {
-          _scannerController.stop();
-        }
-
-        // THEN close the dialog if it's still open
-        if (mounted && Navigator.canPop(context)) {
-          // Check if the current route is the dialog before popping
-          final currentRoute = ModalRoute.of(context);
-          if (currentRoute is DialogRoute) {
-             Navigator.of(context).pop(); // Close the scanner dialog
-          }
-        }
-
-        // Process the scanned data
-        try {
-          final Map<String, dynamic> data = jsonDecode(scannedData);
-          final String? ip = data['ip'] as String?;
-          final int? port = data['port'] as int?;
-          final String? alias = data['alias'] as String?;
-
-          if (ip != null && port != null && alias != null) {
-            final scannedDevice = DeviceInfo(ip: ip, port: port, alias: alias);
-            // Option 1: Add to favorites automatically?
-            // Option 2: Directly initiate send?
-            // Option 3: Show confirmation dialog?
-            // For now, let's show a confirmation to send or add to favorites.
-            if (!mounted) return;
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: Text('Device Found: ${scannedDevice.alias}'),
-                content: Text('IP: ${scannedDevice.ip}:${scannedDevice.port}\n\nSend current selection or add to favorites?'),
-                actions: [
-                  TextButton(
-                    child: const Text('Add Favorite'),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _ipController.text = scannedDevice.ip;
-                      _nameController.text = scannedDevice.alias;
-                      _addFavorite().then((success) {
-                        if (success) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${scannedDevice.alias} to favorites.')));
-                        }
-                      });
-                    },
-                  ),
-                  TextButton(
-                    child: const Text('Send'),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _initiateSend(scannedDevice);
-                    },
-                  ),
-                  TextButton(
-                    child: const Text('Cancel'),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            );
-          } else {
-            throw const FormatException('Invalid QR code data format.');
-          }
-        } catch (e) {
-          print('Error processing scanned QR code: $e');
+      setState(() {
+        _scanResult = scanResult;
+      });
+      print('QR Code Scanned: $_scanResult');
+      try {
+        final Map<String, dynamic> data = jsonDecode(_scanResult!);
+        final String? ip = data['ip'] as String?;
+        final int? port = data['port'] as int?;
+        final String? alias = data['alias'] as String?;
+        if (ip != null && port != null && alias != null) {
+          final scannedDevice = DeviceInfo(ip: ip, port: port, alias: alias);
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invalid QR code data: $e')));
+          showDialog(
+            context: context,
+            builder:
+                (context) => AlertDialog(
+                  title: Text('Device Found: ${scannedDevice.alias}'),
+                  content: Text('IP: ${scannedDevice.ip}:${scannedDevice.port}\n\nSend current selection or add to favorites?'),
+                  actions: [
+                    TextButton(
+                      child: const Text('Add Favorite'),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _ipController.text = scannedDevice.ip;
+                        _nameController.text = scannedDevice.alias;
+                        _addFavorite().then((success) {
+                          if (success && mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${scannedDevice.alias} to favorites.')));
+                          }
+                        });
+                      },
+                    ),
+                    TextButton(
+                      child: const Text('Send'),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _initiateSend(scannedDevice);
+                      },
+                    ),
+                    TextButton(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop()),
+                  ],
+                ),
+          );
+        } else {
+          throw const FormatException('Invalid QR code data format (missing ip, port, or alias).');
         }
+      } catch (e) {
+        print('Error processing scanned QR code: $e');
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invalid QR data. Scanned: "$_scanResult"')));
       }
+    } catch (e) {
+      print('Error during QR scan or processing: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error scanning QR code: $e')));
     }
   }
-} // End of _HomePageState class
+}
