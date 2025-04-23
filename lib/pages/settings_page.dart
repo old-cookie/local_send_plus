@@ -1,59 +1,35 @@
-import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // For HapticFeedback
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// Hide the conflicting provider from settings_provider
-import 'package:local_send_plus/providers/settings_provider.dart' hide sharedPreferencesProvider; 
+import 'package:local_send_plus/providers/settings_provider.dart' hide sharedPreferencesProvider;
 import 'package:file_picker/file_picker.dart';
-import 'package:local_send_plus/main.dart'; // Import main for themeModeNotifierProvider
+import 'package:local_send_plus/main.dart';
 
-// Helper for haptic feedback
 void selectionHaptic() {
   HapticFeedback.selectionClick();
 }
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
-
-  /// Build Brightness Segmented Button
   Widget _buildBrightnessSegmentedButton(BuildContext context, WidgetRef ref) {
-    // Get SharedPreferences instance
     final prefs = ref.watch(sharedPreferencesProvider);
-    // Get the current brightness setting, default to "system"
     final currentBrightness = prefs.getString("brightness") ?? "system";
-
-    // TODO: Add localization if needed (AppLocalizations.of(context)!)
     return SegmentedButton<String>(
       segments: const [
-        ButtonSegment(
-          value: "dark",
-          // label: Text(AppLocalizations.of(context)!.settingsBrightnessDark),
-          label: Text("Dark"), // Placeholder text
-          icon: Icon(Icons.brightness_4_rounded),
-        ),
-        ButtonSegment(
-          value: "system",
-          // label: Text(AppLocalizations.of(context)!.settingsBrightnessSystem),
-          label: Text("System"), // Placeholder text
-          icon: Icon(Icons.brightness_auto_rounded),
-        ),
-        ButtonSegment(
-          value: "light",
-          // label: Text(AppLocalizations.of(context)!.settingsBrightnessLight),
-          label: Text("Light"), // Placeholder text
-          icon: Icon(Icons.brightness_high_rounded),
-        ),
+        ButtonSegment(value: "dark", label: Text("Dark"), icon: Icon(Icons.brightness_4_rounded)),
+        ButtonSegment(value: "system", label: Text("System"), icon: Icon(Icons.brightness_auto_rounded)),
+        ButtonSegment(value: "light", label: Text("Light"), icon: Icon(Icons.brightness_high_rounded)),
       ],
       selected: {currentBrightness},
       onSelectionChanged: (Set<String> newSelection) async {
         selectionHaptic();
         final newBrightness = newSelection.first;
-        // Update the theme mode using the notifier
         await ref.read(themeModeNotifierProvider.notifier).setThemeMode(newBrightness);
-        // No need for setState, Riverpod handles rebuilds
       },
     );
   }
+
   Future<void> _showEditAliasDialog(BuildContext context, WidgetRef ref, String currentAlias) async {
     final TextEditingController controller = TextEditingController(text: currentAlias);
     return showDialog<void>(
@@ -150,14 +126,10 @@ class SettingsPage extends ConsumerWidget {
               },
             ),
           const Divider(),
-          // Add Brightness Selector ListTile
           ListTile(
             leading: const Icon(Icons.brightness_6_outlined),
             title: const Text('Brightness'),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: _buildBrightnessSegmentedButton(context, ref),
-            ),
+            subtitle: Padding(padding: const EdgeInsets.only(top: 8.0), child: _buildBrightnessSegmentedButton(context, ref)),
           ),
           const Divider(),
         ],
