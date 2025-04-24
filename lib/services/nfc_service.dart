@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'package:logging/logging.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -10,6 +11,8 @@ import 'package:device_info_plus/device_info_plus.dart';
 /// A service class that handles NFC (Near Field Communication) operations.
 /// This class provides functionality for reading and writing device information using NFC tags.
 class NfcService {
+  final _logger = Logger('NfcService');
+  
   /// Checks if NFC is available on the current device.
   /// 
   /// Returns:
@@ -60,7 +63,7 @@ class NfcService {
         return {'ip': ipAddress, 'name': deviceName};
       }
     } catch (e) {
-      print('Error getting device info: $e');
+      _logger.warning('Error getting device info', e);
     }
     return null;
   }

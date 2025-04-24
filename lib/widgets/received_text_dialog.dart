@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_link_previewer/flutter_link_previewer.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' show PreviewData;
+import 'dart:developer' as developer;
 
 /// A dialog widget that displays received text content with link preview functionality.
 /// This widget allows users to view the received text and copy it to the clipboard.
@@ -10,7 +11,6 @@ class ReceivedTextDialog extends StatefulWidget {
   final String receivedText;
 
   /// Creates a [ReceivedTextDialog] with the specified received text.
-  /// 
   /// Parameters:
   /// - [receivedText]: The text content to be displayed in the dialog.
   /// - [key]: An optional key to uniquely identify this widget.
@@ -60,16 +60,14 @@ class _ReceivedTextDialogState extends State<ReceivedTextDialog> {
         TextButton(
           child: const Text('Copy to Clipboard'),
           onPressed: () {
-            Clipboard.setData(ClipboardData(text: widget.receivedText))
-                .then((_) {
-                  // Optionally show a confirmation message
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Text copied to clipboard!')));
-                  Navigator.of(context).pop();
-                })
-                .catchError((error) {
-                  print('Error copying text to clipboard: $error');
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error copying text.')));
-                });
+            Clipboard.setData(ClipboardData(text: widget.receivedText)).then((_) {
+              // Optionally show a confirmation message
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Text copied to clipboard!')));
+              Navigator.of(context).pop();
+            }).catchError((error) {
+              developer.log('Error copying text to clipboard: $error');
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error copying text.')));
+            });
           },
         ),
       ],

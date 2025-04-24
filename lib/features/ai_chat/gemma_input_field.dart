@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_gemma/core/chat.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:logging/logging.dart';
 import 'chat_message.dart';
 import 'services/gemma_service.dart';
 
@@ -37,9 +38,9 @@ class GemmaInputField extends StatefulWidget {
 
 /// The state for the [GemmaInputField] widget.
 ///
-/// Manages the interaction with the [GemmaLocalService] and updates the UI
-/// as new message tokens are received.
 class GemmaInputFieldState extends State<GemmaInputField> {
+  final _logger = Logger('GemmaInputField');
+
   /// The local service instance for interacting with the Gemma model.
   GemmaLocalService? _gemma;
 
@@ -96,7 +97,7 @@ class GemmaInputFieldState extends State<GemmaInputField> {
             _subscription?.cancel();
           },
           onError: (error) {
-            print('Error processing message: $error');
+            _logger.severe('Error processing message: $error');
             // Ensure the widget is still mounted.
             if (!mounted) return;
             // If the message is empty, set an error message.

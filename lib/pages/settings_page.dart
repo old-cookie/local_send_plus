@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_send_plus/providers/settings_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:local_send_plus/main.dart';
+import 'package:logging/logging.dart';
+
+final _logger = Logger('SettingsPage');
 
 /// Helper function to provide haptic feedback on selection
 void selectionHaptic() {
@@ -84,6 +87,7 @@ class SettingsPage extends ConsumerWidget {
                   if (context.mounted) {
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alias updated successfully!')));
+
                   }
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alias cannot be empty.')));
@@ -103,7 +107,6 @@ class SettingsPage extends ConsumerWidget {
     try {
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select Destination Directory');
       if (selectedDirectory != null) {
-        // Use the main settingsProvider notifier
         await ref.read(settingsProvider.notifier).setDestinationDirectory(selectedDirectory);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Destination directory set to: $selectedDirectory')));
@@ -114,7 +117,7 @@ class SettingsPage extends ConsumerWidget {
         }
       }
     } catch (e) {
-      print('Error picking directory: $e');
+      _logger.severe('Error picking directory', e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error selecting directory: $e')));
       }

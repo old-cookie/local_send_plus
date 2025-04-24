@@ -79,7 +79,7 @@ class _CropPageState extends State<CropPage> {
   /// - 9:16: Widescreen portrait
   /// - 4:3: Traditional landscape
   /// - 3:4: Traditional portrait
-  /// 
+  ///
   /// @return Widget A wrapped row of ratio selection buttons
   Widget _buildRatioButtons() {
     final Map<String, double?> ratios = {
@@ -95,36 +95,34 @@ class _CropPageState extends State<CropPage> {
       alignment: WrapAlignment.center,
       spacing: 10.0,
       runSpacing: 5.0,
-      children:
-          ratios.entries.map((entry) {
-            final String label = entry.key;
-            final double? value = entry.value;
-            final bool isSelected =
-                (widget.controller.preferredCropAspectRatio == null && value == null) ||
-                (widget.controller.preferredCropAspectRatio != null &&
-                    value != null &&
-                    (widget.controller.preferredCropAspectRatio! - value).abs() < 0.01);
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    widget.controller.preferredCropAspectRatio = value;
-                  });
-                },
+      children: ratios.entries.map((entry) {
+        final String label = entry.key;
+        final double? value = entry.value;
+        final bool isSelected = (widget.controller.preferredCropAspectRatio == null && value == null) ||
+            (widget.controller.preferredCropAspectRatio != null &&
+                value != null &&
+                (widget.controller.preferredCropAspectRatio! - value).abs() < 0.01);
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                widget.controller.preferredCropAspectRatio = value;
+              });
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.orange.withOpacity(0.8) : Colors.black.withOpacity(0.5),
                 borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isSelected ? Colors.orange.withOpacity(0.8) : Colors.black.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: isSelected ? Colors.orange : Colors.grey[700]!, width: 1.5),
-                  ),
-                  child: Text(label, style: TextStyle(color: Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                ),
+                border: Border.all(color: isSelected ? Colors.orange : Colors.grey[700]!, width: 1.5),
               ),
-            );
-          }).toList(),
+              child: Text(label, style: TextStyle(color: Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }

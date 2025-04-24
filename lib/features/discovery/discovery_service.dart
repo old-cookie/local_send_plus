@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_send_plus/features/discovery/discovery_provider.dart';
 import 'package:local_send_plus/models/device_info.dart';
 import 'package:local_send_plus/providers/settings_provider.dart';
+import 'package:logging/logging.dart';
 
 // Provides the DiscoveryService instance.
 final discoveryServiceProvider = Provider<DiscoveryService>((ref) {
@@ -14,10 +15,8 @@ final discoveryServiceProvider = Provider<DiscoveryService>((ref) {
 
 /// Handles network discovery of other LocalSend+ devices using UDP multicast.
 ///
-/// This service listens for discovery packets and sends out its own discovery
-/// requests periodically. It maintains a list of discovered devices and handles
-/// device timeouts.
 class DiscoveryService {
+  final _logger = Logger('DiscoveryService');
   final Ref _ref; // Riverpod ref for accessing other providers.
   RawDatagramSocket? _socket; // The UDP socket used for multicast communication.
   Timer? _discoveryTimer; // Timer for periodically sending discovery packets.
@@ -40,9 +39,8 @@ class DiscoveryService {
   /// discovery packets periodically. Does nothing if discovery is already active
   /// or if running on the web platform.
   Future<void> startDiscovery() async {
-    // Discovery is not supported on the web platform.
     if (kIsWeb) {
-      print('Discovery service is not supported on the web platform.');
+      _logger.info('Discovery service is not supported on the web platform.');
       return;
     }
     // Do nothing if discovery is already running.
@@ -52,7 +50,7 @@ class DiscoveryService {
     await _updateLocalIPs();
     // Warn if local IPs couldn't be determined, as self-discovery filtering might fail.
     if (_localIPs.isEmpty && !kIsWeb) {
-      print("Warning: Could not determine local IP addresses. Self-discovery filtering might not work.");
+      _logger.warning("Could not determine local IP addresses. Self-discovery filtering might not work.");
     }
 
     try {
@@ -62,20 +60,19 @@ class DiscoveryService {
       _socket!.joinMulticast(InternetAddress(_multicastAddress));
       // Listen for incoming datagrams.
       _socket!.listen(
-        _handleResponse, // Handle received packets.
+        _handleResponse,
         onError: (error) {
-          // Handle potential errors with the socket.
-          print('Discovery socket error: $error');
-          stopDiscovery(); // Stop discovery on error.
+          _logger.severe('Discovery socket error: $error');
+          stopDiscovery();
         },
         onDone: () {
-          // Handle socket closure.
-          print('Discovery socket closed.');
-          _isDiscovering = false; // Update discovery state.
+          _logger.info('Discovery socket closed.');
+          _isDiscovering = false;
         },
       );
-      _isDiscovering = true; // Mark discovery as active.
-      print('Discovery started on port $_listenPort, joined multicast group $_multicastAddress');
+
+      _isDiscovering = true;
+      _logger.info('Discovery started on port $_listenPort, joined multicast group $_multicastAddress');
 
       // Send the initial discovery packet immediately.
       await _sendDiscoveryPacket();
@@ -92,7 +89,7 @@ class DiscoveryService {
       });
     } catch (e) {
       // Handle errors during discovery startup.
-      print('Failed to start discovery: $e');
+      _logger.severe('Failed to start discovery: $e');
       _isDiscovering = false; // Ensure discovery state is updated.
       await stopDiscovery(); // Clean up resources.
     }
@@ -106,7 +103,7 @@ class DiscoveryService {
     // Do nothing if discovery is not running or already stopped.
     if (!_isDiscovering && _socket == null && _discoveryTimer == null) return;
 
-    print('Stopping discovery...');
+    _logger.info('Stopping discovery...');
     _isDiscovering = false; // Mark discovery as inactive.
 
     // Cancel the periodic discovery timer.
@@ -117,14 +114,16 @@ class DiscoveryService {
     _socket?.close();
     _socket = null;
 
-    // Cancel all active device expiry timers.
-    _deviceExpiryTimers.values.forEach((timer) => timer.cancel());
+    // Cancel all active device expiry timers
+    for (final timer in _deviceExpiryTimers.values) {
+      timer.cancel();
+    }
     _deviceExpiryTimers.clear();
 
     // Clear the list of discovered devices in the provider.
     _ref.read(discoveredDevicesProvider.notifier).clearDevices();
 
-    print('Discovery stopped.');
+    _logger.info('Discovery stopped.');
   }
 
   /// Sends a discovery packet over the multicast network.
@@ -145,7 +144,7 @@ class DiscoveryService {
       _socket!.send(data, InternetAddress(_multicastAddress), _listenPort);
     } catch (e) {
       // Log errors during packet sending.
-      print('Error sending discovery packet: $e');
+      _logger.warning('Error sending discovery packet: $e');
     }
   }
 
@@ -192,7 +191,7 @@ class DiscoveryService {
           // Start a new expiry timer for the device.
           _deviceExpiryTimers[deviceKey] = Timer(_deviceTimeout, () {
             // Executed when the timer expires (device timed out).
-            print('Device ${deviceInfo.alias} ($deviceKey) timed out.');
+            _logger.info('Device ${deviceInfo.alias} ($deviceKey) timed out.');
             // Remove the device from the discovered list.
             _ref.read(discoveredDevicesProvider.notifier).removeDevice(deviceInfo);
             // Remove the timer from the map.
@@ -201,7 +200,7 @@ class DiscoveryService {
         }
       } catch (e) {
         // Log errors during packet processing.
-        print('Error processing received packet from ${datagram.address.address}: $e');
+        _logger.warning('Error processing received packet from ${datagram.address.address}: $e');
       }
     }
   }
@@ -220,7 +219,7 @@ class DiscoveryService {
     // IP fetching is not supported on the web platform.
     if (kIsWeb) {
       _localIPs.clear(); // Ensure the set is empty on web.
-      print("Local IP address fetching is not supported on the web platform.");
+      _logger.info("Local IP address fetching is not supported on the web platform.");
       return;
     }
 
@@ -233,10 +232,10 @@ class DiscoveryService {
           _localIPs.add(addr.address);
         }
       }
-      print("Local IPs updated: $_localIPs");
+      _logger.info("Local IPs updated: $_localIPs");
     } catch (e) {
       // Log errors during IP fetching.
-      print("Error fetching local IPs: $e");
+      _logger.severe("Error fetching local IPs: $e");
       _localIPs.clear(); // Clear the list on error to avoid incorrect filtering.
     }
   }

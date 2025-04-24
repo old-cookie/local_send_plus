@@ -94,8 +94,7 @@ class _QrScannerPageState extends State<QrScannerPage> with WidgetsBindingObserv
           // Mobile scanner widget that handles camera preview and QR detection
           MobileScanner(
             controller: controller,
-            onDetect: (capture) {
-            },
+            onDetect: (capture) {},
           ),
         ],
       ),

@@ -4,7 +4,6 @@ import 'package:device_info_plus/device_info_plus.dart';
 
 class PermissionManager {
   /// Requests permission to access photos and videos on the device
-  /// 
   /// For Android 13 (API 33) and above, requests both photos and videos permissions separately
   /// For Android below 13, requests storage permission
   /// For iOS, requests photos permission only
@@ -31,7 +30,6 @@ class PermissionManager {
   }
 
   /// Requests permission to access device storage
-  /// 
   /// Only applicable for Android devices below Android 13 (API 33)
   /// For Android 13 and above, returns true without requesting permission
   /// For other platforms, returns true by default
@@ -52,7 +50,6 @@ class PermissionManager {
   }
 
   /// Opens the app settings page in device settings
-  /// 
   /// Useful when permissions need to be granted manually by the user
   /// Returns true if the settings page was successfully opened
   static Future<bool> openPermissionSettings() async {

@@ -45,9 +45,7 @@ class ChatMessageWidget extends StatelessWidget {
               // Style the bubble with background color and rounded corners.
               decoration: BoxDecoration(color: bubbleColor, borderRadius: BorderRadius.circular(8.0)),
               // Display the message text using Markdown, or a loading indicator if empty.
-              child: message.text.isNotEmpty
-                  ? MarkdownBody(data: message.text)
-                  : const Center(child: CircularProgressIndicator()),
+              child: message.text.isNotEmpty ? MarkdownBody(data: message.text) : const Center(child: CircularProgressIndicator()),
             ),
           ),
           // Add spacing between message bubble and avatar.

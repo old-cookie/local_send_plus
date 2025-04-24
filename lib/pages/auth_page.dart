@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_send_plus/features/security/security_service.dart';
 import 'package:local_send_plus/pages/home_page.dart';
 import 'package:local_send_plus/providers/settings_provider.dart';
+import 'package:logging/logging.dart';
 
 /// AuthPage is the initial authentication screen that handles biometric verification
 /// before allowing access to the main application.
@@ -18,17 +19,18 @@ class AuthPage extends ConsumerStatefulWidget {
 /// State management for AuthPage, handling biometric authentication flow
 /// and user interface states
 class _AuthPageState extends ConsumerState<AuthPage> {
+  final _log = Logger('AuthPage');
   // Authentication state flags
-  bool _isAuthenticating = false;    // Tracks if authentication is in progress
-  bool _authFailed = false;          // Indicates if the last authentication attempt failed
-  String _statusText = '';           // Displays current authentication status
-  bool _showBiometricHelp = false;   // Controls visibility of help section
-  String _biometricErrorCode = '';   // Stores biometric error codes for troubleshooting
+  bool _isAuthenticating = false; // Tracks if authentication is in progress
+  bool _authFailed = false; // Indicates if the last authentication attempt failed
+  String _statusText = ''; // Displays current authentication status
+  bool _showBiometricHelp = false; // Controls visibility of help section
+  String _biometricErrorCode = ''; // Stores biometric error codes for troubleshooting
 
   @override
   void initState() {
     super.initState();
-    print('AuthPage initialized');
+    _log.info('AuthPage initialized');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndAuthenticate();
     });
@@ -36,19 +38,19 @@ class _AuthPageState extends ConsumerState<AuthPage> {
 
   /// Initiates the authentication process based on platform and settings
   Future<void> _checkAndAuthenticate() async {
-    print('Checking authentication method');
+    _log.info('Checking authentication method');
     if (kIsWeb) {
-      print('Web platform, proceeding to app');
+      _log.info('Web platform, proceeding to app');
       _proceedToApp();
       return;
     }
     final bool biometricEnabled = ref.read(biometricAuthProvider);
-    print('Biometric enabled in settings: $biometricEnabled');
+    _log.info('Biometric enabled in settings: $biometricEnabled');
     if (biometricEnabled) {
-      print('Attempting biometric authentication');
+      _log.info('Attempting biometric authentication');
       _authenticate();
     } else {
-      print('Biometric not enabled, proceeding to app');
+      _log.info('Biometric not enabled, proceeding to app');
       _proceedToApp();
     }
   }
@@ -57,7 +59,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
   /// Displays biometric prompt and processes the authentication result
   Future<void> _authenticate() async {
     if (_isAuthenticating) {
-      print('Authentication already in progress, ignoring request');
+      _log.info('Authentication already in progress, ignoring request');
       return;
     }
     setState(() {
@@ -69,15 +71,15 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     });
     final securityService = ref.read(securityServiceProvider);
     const String reason = 'Please authenticate to open LocalSend Plus';
-    print('Displaying biometric prompt: $reason');
+    _log.info('Displaying biometric prompt: $reason');
     final Map<String, dynamic> result = await securityService.authenticateWithBiometrics(reason);
     final bool authenticated = result['success'] as bool;
     if (!mounted) return;
     if (authenticated) {
-      print('Authentication successful');
+      _log.info('Authentication successful');
       _proceedToApp();
     } else {
-      print('Authentication failed: ${result['errorMessage']} (Code: ${result['errorCode']})');
+      _log.warning('Authentication failed: ${result['errorMessage']} (Code: ${result['errorCode']})');
       setState(() {
         _authFailed = true;
         _isAuthenticating = false;
@@ -91,13 +93,13 @@ class _AuthPageState extends ConsumerState<AuthPage> {
   /// Navigates to the main application after successful authentication
   void _proceedToApp() {
     if (!mounted) return;
-    print('Proceeding to HomePage');
+    _log.info('Proceeding to HomePage');
     Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const HomePage()));
   }
 
   /// Handles application exit based on platform
   void _exitApp() {
-    print('User chose to exit app');
+    _log.info('User chose to exit app');
     if (Platform.isAndroid) {
       SystemNavigator.pop();
     } else if (Platform.isIOS) {

@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io'; // Keep standard dart:io import
-import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:local_send_plus/features/receive/received_file_provider.dart';
 import 'package:local_send_plus/features/receive/received_text_provider.dart';
 import 'package:local_send_plus/models/received_file_info.dart';
@@ -18,15 +19,16 @@ const int _defaultPort = 2706;
 class ServerService {
   final Ref _ref;
   HttpServer? _server;
+  final _logger = Logger('ServerService');
 
   /// Constructs a [ServerService] instance
-  /// 
+  ///
   /// [_ref] - Riverpod reference for state management
   /// [initialPort] - Initial port number for the server (defaults to 2706)
   ServerService(this._ref, {int initialPort = _defaultPort});
 
   /// Starts the HTTP server with file and text receiving capabilities
-  /// 
+  ///
   /// Sets up routes for:
   /// - `/` - Basic server health check
   /// - `/info` - Server information endpoint
@@ -34,7 +36,7 @@ class ServerService {
   /// - `/receive-text` - Text receiving endpoint
   Future<void> startServer() async {
     if (_server != null) {
-      print('Server already running on port ${_server!.port}');
+      _logger.info('Server already running on port ${_server!.port}');
       return;
     }
     try {
@@ -46,38 +48,38 @@ class ServerService {
       router.post('/receive', (Request request) => _handleReceiveRequest(request, _ref));
       router.post('/receive-text', (Request request) => _handleReceiveTextRequest(request, _ref));
       final handler = const Pipeline().addMiddleware(logRequests()).addHandler(router.call);
-      print('Starting HTTP server...');
+      _logger.info('Starting HTTP server...');
       const int fixedPort = 2706;
-      print('Starting HTTP server on fixed port $fixedPort...');
-      int? actualPort; // Declare here, nullable
+      _logger.info('Starting HTTP server on fixed port $fixedPort...');
+      int? actualPort;
       if (!kIsWeb) {
         _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, fixedPort);
-        print('HTTP Server started');
-        actualPort = _server!.port; // Assign here
-        print('Server listening on port $actualPort (HTTP only)');
+        _logger.info('HTTP Server started');
+        actualPort = _server!.port;
+        _logger.info('Server listening on port $actualPort (HTTP only)');
         _ref.read(serverStateProvider.notifier).setRunning(actualPort);
       } else {
-        print('Warning: Full HTTP server functionality is not available on the web platform.');
+        _logger.warning('Warning: Full HTTP server functionality is not available on the web platform.');
         _ref.read(serverStateProvider.notifier).setError('Server not supported on web');
         return;
       }
     } catch (e) {
-      print('Error starting server: $e');
+      _logger.severe('Error starting server: $e');
       _ref.read(serverStateProvider.notifier).setError(e.toString());
       await stopServer();
     }
   }
 
   /// Stops the running server instance
-  /// 
+  ///
   /// Forces the server to close and updates the server state
   Future<void> stopServer() async {
     if (_server == null) return;
-    print('Stopping server...');
+    _logger.info('Stopping server...');
     await _server!.close(force: true);
     _server = null;
     _ref.read(serverStateProvider.notifier).setStopped();
-    print('Server stopped.');
+    _logger.info('Server stopped.');
   }
 
   /// Returns the current port number of the running server
@@ -85,7 +87,7 @@ class ServerService {
   int? get runningPort => _server?.port;
 
   /// Handles server information requests
-  /// 
+  ///
   /// Returns JSON containing:
   /// - alias: Device name
   /// - version: Server version
@@ -98,10 +100,10 @@ class ServerService {
   }
 
   /// Handles file upload requests
-  /// 
+  ///
   /// Processes multipart form data to save received files
   /// Updates the [receivedFileProvider] with file information
-  /// 
+  ///
   /// Returns success/error response based on upload result
   Future<Response> _handleReceiveRequest(Request request, Ref ref) async {
     if (request.multipart() case var multipart?) {
@@ -110,13 +112,12 @@ class ServerService {
       try {
         final downloadsDir = await getDownloadsDirectory();
         if (downloadsDir == null) {
-          print('Error: Could not access downloads directory.');
+          _logger.severe('Error: Could not access downloads directory.');
           return Response.internalServerError(body: 'Could not access downloads directory.');
         }
         final targetDirectory = downloadsDir.path;
-        print('Saving received files to: $targetDirectory');
+        _logger.info('Saving received files to: $targetDirectory');
         await for (final part in multipart.parts) {
-          // Use multipart.parts stream
           final contentDisposition = part.headers['content-disposition'];
           final filenameRegExp = RegExp(r'filename="([^"]*)"');
           final match = filenameRegExp.firstMatch(contentDisposition ?? '');
@@ -124,34 +125,34 @@ class ServerService {
           if (receivedFileName != null) {
             receivedFileName = receivedFileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
             if (receivedFileName.isEmpty) {
-              print('Skipping part with empty sanitized filename.');
+              _logger.warning('Skipping part with empty sanitized filename.');
               continue;
             }
             finalFilePath = '$targetDirectory${Platform.pathSeparator}$receivedFileName';
             final outputFile = File(finalFilePath);
-            print('Receiving file: $receivedFileName to $finalFilePath');
+            _logger.info('Receiving file: $receivedFileName to $finalFilePath');
             try {
               await outputFile.parent.create(recursive: true);
             } catch (dirError) {
-              print('Error creating directory ${outputFile.parent.path}: $dirError');
+              _logger.severe('Error creating directory ${outputFile.parent.path}: $dirError');
               return Response.internalServerError(body: 'Could not create target directory.');
             }
             try {
               final fileSink = outputFile.openWrite();
               await part.pipe(fileSink);
             } catch (writeError) {
-              print('Error writing file $finalFilePath: $writeError');
+              _logger.severe('Error writing file $finalFilePath: $writeError');
               try {
                 if (await outputFile.exists()) await outputFile.delete();
               } catch (_) {}
               return Response.internalServerError(body: 'Error writing file.');
             }
-            print('File received successfully: $receivedFileName');
+            _logger.info('File received successfully: $receivedFileName');
             final fileInfo = ReceivedFileInfo(filename: receivedFileName, path: finalFilePath);
             ref.read(receivedFileProvider.notifier).setReceivedFile(fileInfo);
             break;
           } else {
-            print('Skipping part with no filename in content-disposition header.');
+            _logger.warning('Skipping part with no filename in content-disposition header.');
           }
         }
         if (receivedFileName == null) {
@@ -159,16 +160,16 @@ class ServerService {
         }
         return Response.ok('File "$receivedFileName" received successfully.');
       } catch (e) {
-        print('Error processing multipart request: $e');
+        _logger.severe('Error processing multipart request: $e');
         if (finalFilePath != null) {
           try {
             final tempFile = File(finalFilePath);
             if (await tempFile.exists()) {
               await tempFile.delete();
-              print('Cleaned up partially written file: $finalFilePath');
+              _logger.info('Cleaned up partially written file: $finalFilePath');
             }
           } catch (cleanupError) {
-            print('Error cleaning up file $finalFilePath: $cleanupError');
+            _logger.severe('Error cleaning up file $finalFilePath: $cleanupError');
           }
         }
         return Response.internalServerError(body: 'Error processing request: $e');
@@ -179,26 +180,26 @@ class ServerService {
   }
 
   /// Handles incoming text message requests
-  /// 
+  ///
   /// Processes plain text content and updates [receivedTextProvider]
-  /// 
+  ///
   /// Returns success/error response based on text processing result
   Future<Response> _handleReceiveTextRequest(Request request, Ref ref) async {
     try {
       final contentType = request.headers['content-type'];
       if (contentType == null || !contentType.startsWith('text/plain')) {
-        print('Warning: Received text request with unexpected content type: $contentType');
+        _logger.warning('Received text request with unexpected content type: $contentType');
       }
-      final receivedText = await request.readAsString(utf8); // Read body as UTF-8 string
+      final receivedText = await request.readAsString(utf8);
       if (receivedText.isEmpty) {
-        print('Received empty text message.');
+        _logger.info('Received empty text message.');
         return Response.badRequest(body: 'Received empty text.');
       }
-      print('Received text: "$receivedText"');
+      _logger.info('Received text: "$receivedText"');
       ref.read(receivedTextProvider.notifier).state = receivedText;
       return Response.ok('Text received successfully.');
     } catch (e) {
-      print('Error processing text request: $e');
+      _logger.severe('Error processing text request: $e');
       return Response.internalServerError(body: 'Error processing text request: $e');
     }
   }

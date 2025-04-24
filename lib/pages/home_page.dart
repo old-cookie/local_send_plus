@@ -16,7 +16,6 @@ import 'package:local_send_plus/widgets/received_file_dialog.dart';
 import 'package:local_send_plus/widgets/received_text_dialog.dart';
 import 'package:local_send_plus/models/received_file_info.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-// Remove shared_preferences import, use provider from main.dart
 import 'dart:convert';
 import 'package:image_editor_plus/image_editor_plus.dart';
 import 'package:local_send_plus/pages/video_editor_page.dart';
@@ -31,11 +30,13 @@ import 'package:ffmpeg_kit_flutter_new/statistics.dart';
 import 'package:local_send_plus/pages/settings_page.dart';
 import 'package:local_send_plus/features/ai_chat/chat_screen.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
-// Import main.dart provider instead of settings_provider's local one
-import 'package:local_send_plus/providers/settings_provider.dart'; // Includes NFC providers now
+import 'package:local_send_plus/providers/settings_provider.dart';
 import 'package:local_send_plus/features/server/server_provider.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:local_send_plus/pages/qr_scanner_page.dart';
+import 'package:logging/logging.dart';
+
+final _logger = Logger('HomePage');
 
 /// HomePage is the main screen of the LocalSend Plus application.
 /// It provides functionality for:
@@ -45,7 +46,7 @@ import 'package:local_send_plus/pages/qr_scanner_page.dart';
 /// - NFC communication capabilities
 /// - QR code scanning and generation
 /// - File editing capabilities (image and video)
-/// 
+///
 /// The page maintains state for:
 /// - Currently selected file or text for sending
 /// - Discovery and server services
@@ -60,23 +61,23 @@ class HomePage extends ConsumerStatefulWidget {
 /// for the local file sharing functionality.
 class _HomePageState extends ConsumerState<HomePage> {
   // File selection state
-  String? _selectedFilePath;     // Path to selected file (native platforms)
-  String? _selectedFileName;     // Name of the selected file
+  String? _selectedFilePath; // Path to selected file (native platforms)
+  String? _selectedFileName; // Name of the selected file
   Uint8List? _selectedFileBytes; // File data (web platform or edited files)
-  bool _isSending = false;       // Tracks if a file transfer is in progress
+  bool _isSending = false; // Tracks if a file transfer is in progress
 
   // Text input controllers
-  final TextEditingController _ipController = TextEditingController();     // For manual IP entry
-  final TextEditingController _nameController = TextEditingController();   // For device name entry
-  final TextEditingController _textController = TextEditingController();   // For text message input
+  final TextEditingController _ipController = TextEditingController(); // For manual IP entry
+  final TextEditingController _nameController = TextEditingController(); // For device name entry
+  final TextEditingController _textController = TextEditingController(); // For text message input
 
   // Service subscriptions and instances
   StreamSubscription? _receivedFileSubscription; // Listens for incoming files
   StreamSubscription? _receivedTextSubscription; // Listens for incoming text messages
-  DiscoveryService? _discoveryService;           // Handles device discovery
-  ServerService? _serverService;                 // Manages the local server
-  String? _localIpAddress;                       // Stores the device's IP address
-  String? _scanResult;                          // Stores QR scan results
+  DiscoveryService? _discoveryService; // Handles device discovery
+  ServerService? _serverService; // Manages the local server
+  String? _localIpAddress; // Stores the device's IP address
+  String? _scanResult; // Stores QR scan results
 
   @override
   void initState() {
@@ -148,6 +149,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     _textController.dispose();
     super.dispose();
   }
+
   Future<void> _fetchLocalIp() async {
     if (kIsWeb) return;
     try {
@@ -158,7 +160,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         });
       }
     } catch (e) {
-      print("Failed to get local IP: $e");
+      _logger.warning("Failed to get local IP", e);
       if (mounted) {
         // Optionally show a snackbar or log error to UI if needed
         // ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not get IP address: $e')));
@@ -187,25 +189,22 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             SimpleDialogOption(
               onPressed: () async {
-                 Navigator.pop(dialogContext); // Close the dialog first
-                 // Call the read method, passing the callback to add to favorites
-                 await ref.read(nfcServiceProvider).readNdef(context, (data) {
-                    print("NFC Read Callback: Received data: $data"); // <-- Add log
-                    // Use the main settingsProvider notifier to add the favorite
-                    try {
-                      ref.read(settingsProvider.notifier).addFavoriteDevice(data);
-                      print("NFC Read Callback: Called addFavoriteDevice successfully."); // <-- Add log
-                      // Optionally show a confirmation SnackBar here if NfcService doesn't
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Added ${data['name']} (${data['ip']}) to favorites via NFC.'))
-                      );
-                    } catch (e) {
-                       print("NFC Read Callback: Error calling addFavoriteDevice: $e"); // <-- Add log
-                       ScaffoldMessenger.of(context).showSnackBar(
-                         SnackBar(content: Text('Error adding favorite via NFC: $e'))
-                       );
-                    }
-                 });
+                Navigator.pop(dialogContext); // Close the dialog first
+                // Call the read method, passing the callback to add to favorites
+                await ref.read(nfcServiceProvider).readNdef(context, (data) {
+                  _logger.info("NFC Read Callback: Received data: $data");
+                  // Use the main settingsProvider notifier to add the favorite
+                  try {
+                    ref.read(settingsProvider.notifier).addFavoriteDevice(data);
+                    _logger.info("NFC Read Callback: Called addFavoriteDevice successfully.");
+                    // Optionally show a confirmation SnackBar here if NfcService doesn't
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text('Added ${data['name']} (${data['ip']}) to favorites via NFC.')));
+                  } catch (e) {
+                    _logger.warning("NFC Read Callback: Error calling addFavoriteDevice: $e");
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error adding favorite via NFC: $e')));
+                  }
+                });
               },
               child: const ListTile(
                 leading: Icon(Icons.download_for_offline),
@@ -213,7 +212,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 subtitle: Text('Adds received device to favorites'),
               ),
             ),
-             SimpleDialogOption(
+            SimpleDialogOption(
               onPressed: () {
                 Navigator.pop(dialogContext); // Just close the dialog
               },
@@ -228,7 +227,8 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   // Remove _loadFavorites and _saveFavorites - managed by SettingsNotifier
 
-  Future<bool> _addFavoriteManually() async { // Renamed to avoid conflict if needed
+  Future<bool> _addFavoriteManually() async {
+    // Renamed to avoid conflict if needed
     final String ip = _ipController.text.trim();
     final String name = _nameController.text.trim();
     if (!mounted) return false;
@@ -246,12 +246,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     final deviceData = {'ip': ip, 'name': name}; // Assuming port is fixed or handled elsewhere
     // Rely on the check within addFavoriteDevice in the provider
 
-    print("Attempting to add favorite: $deviceData"); // <-- Add log
+    _logger.info("Attempting to add favorite: $deviceData");
     try {
       await ref.read(settingsProvider.notifier).addFavoriteDevice(deviceData);
-      print("Successfully called addFavoriteDevice for: $deviceData"); // <-- Add log
+      _logger.info("Successfully called addFavoriteDevice for: $deviceData");
     } catch (e) {
-      print("Error calling addFavoriteDevice: $e"); // <-- Add log for potential errors
+      _logger.severe("Error calling addFavoriteDevice: $e");
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error adding favorite: $e')));
       return false;
@@ -351,15 +351,13 @@ class _HomePageState extends ConsumerState<HomePage> {
       return const SizedBox.shrink();
     }
     final fileNameLower = _selectedFileName!.toLowerCase();
-    final isImage =
-        fileNameLower.endsWith('.jpg') ||
+    final isImage = fileNameLower.endsWith('.jpg') ||
         fileNameLower.endsWith('.jpeg') ||
         fileNameLower.endsWith('.png') ||
         fileNameLower.endsWith('.gif') ||
         fileNameLower.endsWith('.bmp') ||
         fileNameLower.endsWith('.webp');
-    final isVideo =
-        fileNameLower.endsWith('.mp4') ||
+    final isVideo = fileNameLower.endsWith('.mp4') ||
         fileNameLower.endsWith('.mov') ||
         fileNameLower.endsWith('.avi') ||
         fileNameLower.endsWith('.mkv') ||
@@ -381,7 +379,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             } else if (snapshot.hasError) {
-              print('Error generating video thumbnail: ${snapshot.error}');
+              _logger.warning('Error generating video thumbnail: ${snapshot.error}');
               return const Icon(Icons.video_file_outlined, size: 50);
             } else if (snapshot.hasData && snapshot.data != null) {
               return Image.memory(snapshot.data!, fit: BoxFit.cover);
@@ -393,7 +391,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       } else {
         thumbnailWidget = const Icon(Icons.video_file_outlined, size: 50);
       }
-    } else { // Add the missing else block for other file types
+    } else {
+      // Add the missing else block for other file types
       thumbnailWidget = const Icon(Icons.insert_drive_file_outlined, size: 50);
     }
     // Move the return Padding inside the method
@@ -441,88 +440,96 @@ class _HomePageState extends ConsumerState<HomePage> {
             tooltip: 'Refresh Devices',
           ),
           // Wrap the PopupMenuButton with a Consumer to provide ref
-          Consumer(
-            builder: (context, ref, child) {
-              // Watch the provider *outside* the itemBuilder
-              final nfcAvailableAsync = ref.watch(nfcAvailabilityProvider);
-              return PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert),
-                tooltip: 'More Options',
-                onSelected: (String result) {
-                  // ref is available in this scope from the Consumer builder
-                  switch (result) {
-                    case 'nfc_actions': _showNfcDialog(context, ref); break;
-                    case 'scan_qr': _scanQrCode(); break;
-                    case 'ai_chat': if (!mounted) return; Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen())); break;
-                    case 'settings': if (!mounted) return; Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage())); break;
-                  }
-                },
-                // Pass the state down to itemBuilder
-                itemBuilder: (BuildContext context) {
-                  final List<PopupMenuEntry<String>> items = [];
+          Consumer(builder: (context, ref, child) {
+            // Watch the provider *outside* the itemBuilder
+            final nfcAvailableAsync = ref.watch(nfcAvailabilityProvider);
+            return PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'More Options',
+              onSelected: (String result) {
+                // ref is available in this scope from the Consumer builder
+                switch (result) {
+                  case 'nfc_actions':
+                    _showNfcDialog(context, ref);
+                    break;
+                  case 'scan_qr':
+                    _scanQrCode();
+                    break;
+                  case 'ai_chat':
+                    if (!mounted) return;
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen()));
+                    break;
+                  case 'settings':
+                    if (!mounted) return;
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()));
+                    break;
+                }
+              },
+              // Pass the state down to itemBuilder
+              itemBuilder: (BuildContext context) {
+                final List<PopupMenuEntry<String>> items = [];
 
-                  // Use the state captured by the Consumer's builder
-                  nfcAvailableAsync.when(
-                    data: (isAvailable) {
-                      if (isAvailable) {
-                        items.add(const PopupMenuItem<String>(
-                          value: 'nfc_actions',
-                          child: ListTile(leading: Icon(Icons.nfc), title: Text('NFC Send/Receive')),
-                        ));
-                      }
-                    },
-                    loading: () {
+                // Use the state captured by the Consumer's builder
+                nfcAvailableAsync.when(
+                  data: (isAvailable) {
+                    if (isAvailable) {
                       items.add(const PopupMenuItem<String>(
-                        enabled: false,
-                        child: ListTile(
-                          leading: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
-                          title: Text('Checking NFC...'),
-                        ),
+                        value: 'nfc_actions',
+                        child: ListTile(leading: Icon(Icons.nfc), title: Text('NFC Send/Receive')),
                       ));
-                    },
-                    error: (err, stack) {
-                      items.add(PopupMenuItem<String>(
-                        enabled: false,
-                        child: ListTile(
-                          leading: Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
-                          title: const Text('NFC Error'),
-                        ),
-                      ));
-                    },
-                  );
-
-                  // Add other items conditionally, adding dividers
-                  bool needsDivider = items.isNotEmpty && items.last is! PopupMenuDivider;
-
-                  if (!kIsWeb) {
-                    if (needsDivider) items.add(const PopupMenuDivider());
+                    }
+                  },
+                  loading: () {
                     items.add(const PopupMenuItem<String>(
-                      value: 'scan_qr',
-                      child: ListTile(leading: Icon(Icons.qr_code_scanner), title: Text('Scan QR')),
+                      enabled: false,
+                      child: ListTile(
+                        leading: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                        title: Text('Checking NFC...'),
+                      ),
                     ));
-                    needsDivider = true;
-                  }
-
-                  if (!kIsWeb) {
-                    if (needsDivider) items.add(const PopupMenuDivider());
-                    items.add(const PopupMenuItem<String>(
-                      value: 'ai_chat',
-                      child: ListTile(leading: Icon(Icons.chat_bubble_outline), title: Text('AI Chat')),
+                  },
+                  error: (err, stack) {
+                    items.add(PopupMenuItem<String>(
+                      enabled: false,
+                      child: ListTile(
+                        leading: Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+                        title: const Text('NFC Error'),
+                      ),
                     ));
-                    needsDivider = true;
-                  }
+                  },
+                );
 
+                // Add other items conditionally, adding dividers
+                bool needsDivider = items.isNotEmpty && items.last is! PopupMenuDivider;
+
+                if (!kIsWeb) {
                   if (needsDivider) items.add(const PopupMenuDivider());
                   items.add(const PopupMenuItem<String>(
-                    value: 'settings',
-                    child: ListTile(leading: Icon(Icons.settings), title: Text('Settings')),
+                    value: 'scan_qr',
+                    child: ListTile(leading: Icon(Icons.qr_code_scanner), title: Text('Scan QR')),
                   ));
+                  needsDivider = true;
+                }
 
-                  return items;
-                },
-              );
-            }
-          ),
+                if (!kIsWeb) {
+                  if (needsDivider) items.add(const PopupMenuDivider());
+                  items.add(const PopupMenuItem<String>(
+                    value: 'ai_chat',
+                    child: ListTile(leading: Icon(Icons.chat_bubble_outline), title: Text('AI Chat')),
+                  ));
+                  needsDivider = true;
+                }
+
+                if (needsDivider) items.add(const PopupMenuDivider());
+                items.add(const PopupMenuItem<String>(
+                  value: 'settings',
+                  child: ListTile(leading: Icon(Icons.settings), title: Text('Settings')),
+                ));
+
+                return items;
+              },
+            );
+          }),
         ],
       ),
       body: Column(
@@ -551,17 +558,18 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                     ),
                   ),
-                Visibility( // Hide text field when a file is selected
+                Visibility(
+                  // Hide text field when a file is selected
                   visible: _selectedFileName == null,
                   child: Row(
                     children: [
                       Expanded(
                         child: TextField(
-                        controller: _textController,
-                        maxLines: null,
-                        decoration: const InputDecoration(
-                          labelText: 'Enter Text to Send',
-                          border: OutlineInputBorder(),
+                          controller: _textController,
+                          maxLines: null,
+                          decoration: const InputDecoration(
+                            labelText: 'Enter Text to Send',
+                            border: OutlineInputBorder(),
                           ),
                         ),
                       ),
@@ -576,77 +584,77 @@ class _HomePageState extends ConsumerState<HomePage> {
             child: Align(alignment: Alignment.centerLeft, child: Text('Discovered Devices (${discoveredDevices.length}):')),
           ),
           Expanded(
-            child:
-                discoveredDevices.isEmpty
-                    ? const Center(child: Text('Searching for devices...'))
-                    : ListView.builder(
-                      itemCount: discoveredDevices.length,
-                      itemBuilder: (context, index) {
-                        final device = discoveredDevices[index];
-                        return ListTile(
-                          leading: _isSending ? const CircularProgressIndicator() : const Icon(Icons.devices),
-                          title: Text(device.alias),
-                          subtitle: Text('${device.ip}:${device.port}'),
-                          onTap: _isSending ? null : () => _initiateSend(device),
-                        );
-                      },
-                    ),
+            child: discoveredDevices.isEmpty
+                ? const Center(child: Text('Searching for devices...'))
+                : ListView.builder(
+                    itemCount: discoveredDevices.length,
+                    itemBuilder: (context, index) {
+                      final device = discoveredDevices[index];
+                      return ListTile(
+                        leading: _isSending ? const CircularProgressIndicator() : const Icon(Icons.devices),
+                        title: Text(device.alias),
+                        subtitle: Text('${device.ip}:${device.port}'),
+                        onTap: _isSending ? null : () => _initiateSend(device),
+                      );
+                    },
+                  ),
           ),
           _buildSelectedFileThumbnail(),
-          Visibility( // Hide when keyboard is visible
+          Visibility(
+            // Hide when keyboard is visible
             visible: MediaQuery.of(context).viewInsets.bottom == 0,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 48.0), // Adjusted bottom padding if needed when hidden
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                if (kIsWeb)
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.attach_file),
-                    label: const Text('Attach File'),
-                    onPressed: () => _pickFile(context, FileType.any),
-                  )
-                else
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.send),
-                    label: const Text('Send'),
-                    onPressed: () {
-                      if (!mounted) return;
-                      showModalBottomSheet(
-                        context: context,
-                        builder: (BuildContext bc) {
-                          return SafeArea(
-                            child: Wrap(
-                              children: <Widget>[
-                                ListTile(
-                                  leading: const Icon(Icons.photo),
-                                  title: const Text('Photo'),
-                                  onTap: () async {
-                                    Navigator.pop(context);
-                                    await _pickFile(context, FileType.image);
-                                  },
-                                ),
-                                ListTile(
-                                  leading: const Icon(Icons.videocam),
-                                  title: const Text('Video'),
-                                  onTap: () async {
-                                    Navigator.pop(context);
-                                    await _pickFile(context, FileType.video);
-                                  },
-                                ),
-                                ListTile(
-                                  leading: const Icon(Icons.attach_file),
-                                  title: const Text('File'),
-                                  onTap: () async {
-                                    Navigator.pop(context);
-                                    await _pickFile(context, FileType.any);
-                                  },
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      );
+                children: [
+                  if (kIsWeb)
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.attach_file),
+                      label: const Text('Attach File'),
+                      onPressed: () => _pickFile(context, FileType.any),
+                    )
+                  else
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.send),
+                      label: const Text('Send'),
+                      onPressed: () {
+                        if (!mounted) return;
+                        showModalBottomSheet(
+                          context: context,
+                          builder: (BuildContext bc) {
+                            return SafeArea(
+                              child: Wrap(
+                                children: <Widget>[
+                                  ListTile(
+                                    leading: const Icon(Icons.photo),
+                                    title: const Text('Photo'),
+                                    onTap: () async {
+                                      Navigator.pop(context);
+                                      await _pickFile(context, FileType.image);
+                                    },
+                                  ),
+                                  ListTile(
+                                    leading: const Icon(Icons.videocam),
+                                    title: const Text('Video'),
+                                    onTap: () async {
+                                      Navigator.pop(context);
+                                      await _pickFile(context, FileType.video);
+                                    },
+                                  ),
+                                  ListTile(
+                                    leading: const Icon(Icons.attach_file),
+                                    title: const Text('File'),
+                                    onTap: () async {
+                                      Navigator.pop(context);
+                                      await _pickFile(context, FileType.any);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        );
                       },
                     ),
                 ],
@@ -669,7 +677,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           builder: (context, ref, child) {
             // Read the current favorites list from the provider
             final favoritesList = ref.watch(favoriteDevicesProvider);
-            print("Favorites Dialog Consumer rebuilt. Received list: $favoritesList"); // <-- Add log
+            _logger.info("Favorites Dialog Consumer rebuilt. Received list: $favoritesList");
             // Convert List<Map<String, String>> to List<DeviceInfo> for compatibility
             // Assuming a fixed port or handle differently if port varies
             final favorites = favoritesList.map((fav) => DeviceInfo(ip: fav['ip']!, port: 2706, alias: fav['name']!)).toList();
@@ -706,53 +714,53 @@ class _HomePageState extends ConsumerState<HomePage> {
                       favorites.isEmpty // Use the list from the provider
                           ? const Center(child: Padding(padding: EdgeInsets.symmetric(vertical: 16.0), child: Text('No favorites added yet.')))
                           : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: favorites.length, // Use the list from the provider
-                            itemBuilder: (context, index) {
-                              if (index < 0 || index >= favorites.length) { // Use the list from the provider
-                                return const SizedBox.shrink();
-                              }
-                              final device = favorites[index]; // Use the list from the provider
-                              // Convert DeviceInfo back to Map for removal function if needed
-                              final deviceData = {'ip': device.ip, 'name': device.alias};
-                              return ListTile(
-                                leading: const Icon(Icons.star),
-                                title: Text(device.alias),
-                                subtitle: Text('${device.ip}:${device.port}'),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                  tooltip: 'Remove Favorite',
-                                  onPressed: () async {
-                                    print("Attempting to remove favorite with data: $deviceData"); // <-- Add log
-                                    final scaffoldMessenger = ScaffoldMessenger.of(context);
-                                    final removedDeviceAlias = device.alias;
-                                    if (!mounted) return;
-                                    try {
-                                      // Call the provider's remove method
-                                      await ref.read(settingsProvider.notifier).removeFavoriteDevice(deviceData);
-                                      print("Successfully called removeFavoriteDevice for: $deviceData"); // <-- Add log
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: favorites.length, // Use the list from the provider
+                              itemBuilder: (context, index) {
+                                if (index < 0 || index >= favorites.length) {
+                                  // Use the list from the provider
+                                  return const SizedBox.shrink();
+                                }
+                                final device = favorites[index]; // Use the list from the provider
+                                // Convert DeviceInfo back to Map for removal function if needed
+                                final deviceData = {'ip': device.ip, 'name': device.alias};
+                                return ListTile(
+                                  leading: const Icon(Icons.star),
+                                  title: Text(device.alias),
+                                  subtitle: Text('${device.ip}:${device.port}'),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                    tooltip: 'Remove Favorite',
+                                    onPressed: () async {
+                                      _logger.info("Attempting to remove favorite with data: $deviceData");
+                                      final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                      final removedDeviceAlias = device.alias;
                                       if (!mounted) return;
-                                      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Removed $removedDeviceAlias from favorites.')));
-                                    } catch (e) {
-                                      print("Error calling removeFavoriteDevice: $e"); // <-- Add log for potential errors
-                                      if (!mounted) return;
-                                      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error removing favorite: $e')));
-                                    }
-                                    // No need for setDialogState
-                                  },
-                                ),
-                                onTap:
-                                    _isSending
-                                        ? null
-                                        : () {
+                                      try {
+                                        // Call the provider's remove method
+                                        await ref.read(settingsProvider.notifier).removeFavoriteDevice(deviceData);
+                                        _logger.info("Successfully called removeFavoriteDevice for: $deviceData");
+                                        if (!mounted) return;
+                                        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Removed $removedDeviceAlias from favorites.')));
+                                      } catch (e) {
+                                        _logger.severe("Error calling removeFavoriteDevice: $e");
+                                        if (!mounted) return;
+                                        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error removing favorite: $e')));
+                                      }
+                                      // No need for setDialogState
+                                    },
+                                  ),
+                                  onTap: _isSending
+                                      ? null
+                                      : () {
                                           Navigator.of(context).pop();
                                           if (!mounted) return;
                                           _initiateSend(device);
                                         },
-                              );
-                            },
-                          ),
+                                );
+                              },
+                            ),
                     ],
                   ),
                 ),
@@ -834,10 +842,10 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (!mounted) return;
       if (result != null && result.files.isNotEmpty) {
         PlatformFile file = result.files.single;
-        print('FilePicker result on ${kIsWeb ? "Web" : "Native"}:');
-        print('  Name: ${file.name}');
-        print('  Path: ${kIsWeb ? "N/A (Web)" : file.path}');
-        print('  Bytes length: ${file.bytes?.length}');
+        _logger.info('FilePicker result on ${kIsWeb ? "Web" : "Native"}:');
+        _logger.info('  Name: ${file.name}');
+        _logger.info('  Path: ${kIsWeb ? "N/A (Web)" : file.path}');
+        _logger.info('  Bytes length: ${file.bytes?.length}');
         final String fileName = file.name;
         final Uint8List? fileBytes = file.bytes;
         final String? filePath = kIsWeb ? null : file.path;
@@ -880,14 +888,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                 content: const Text('Do you want to edit the video before sending?'),
                 actions: <Widget>[
                   TextButton(
-                    onPressed:
-                        kIsWeb
-                            ? null
-                            : () {
-                              Navigator.of(dialogContext).pop();
-                              if (!mounted) return;
-                              _navigateToVideoEditor(bytes: fileBytes, path: kIsWeb ? null : filePath, fileName: fileName);
-                            },
+                    onPressed: kIsWeb
+                        ? null
+                        : () {
+                            Navigator.of(dialogContext).pop();
+                            if (!mounted) return;
+                            _navigateToVideoEditor(bytes: fileBytes, path: kIsWeb ? null : filePath, fileName: fileName);
+                          },
                     child: Text('Edit Video', style: TextStyle(color: kIsWeb ? Colors.grey : null)),
                   ),
                   TextButton(
@@ -907,19 +914,19 @@ class _HomePageState extends ConsumerState<HomePage> {
         } else if (!kIsWeb && filePath != null) {
           _setPickedFile(bytes: null, path: filePath, name: fileName);
         } else if (kIsWeb && filePath != null) {
-          print('File picking error on Web: Only path is available, but bytes are required.');
+          _logger.warning('File picking error on Web: Only path is available, but bytes are required.');
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to access selected file data.')));
         } else {
-          print('File picking failed: No bytes or path available.');
+          _logger.warning('File picking failed: No bytes or path available.');
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to access selected file.')));
         }
       } else {
-        print('File picking cancelled.');
+        _logger.info('File picking cancelled.');
       }
     } catch (e) {
-      print('Error picking file: $e');
+      _logger.severe('Error picking file', e);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error picking file: $e')));
     }
@@ -928,7 +935,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _navigateToEditor({Uint8List? bytes, String? path, required String fileName}) async {
     Uint8List? imageBytes = bytes;
     if (kIsWeb && imageBytes == null) {
-      print('Error: Cannot edit image on web without image bytes.');
+      _logger.warning('Error: Cannot edit image on web without image bytes.');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot edit photo: Image data not available.')));
       return;
@@ -938,7 +945,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         if (!mounted) return;
         imageBytes = await File(path).readAsBytes();
       } catch (e) {
-        print('Error reading image file from path: $e');
+        _logger.severe('Error reading image file from path: $e', e);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error reading image file: $e')));
         return;
@@ -956,11 +963,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
     if (!mounted) return;
     if (editedImageBytes != null) {
-      print('Image editing complete. Got ${editedImageBytes.length} bytes.');
+      _logger.info('Image editing complete. Got ${editedImageBytes.length} bytes.');
       final editedFileName = 'edited_$fileName';
       _setPickedFile(bytes: editedImageBytes, path: null, name: editedFileName);
     } else {
-      print('Image editing cancelled.');
+      _logger.info('Image editing cancelled.');
       setState(() {
         _selectedFilePath = null;
         _selectedFileName = null;
@@ -971,7 +978,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Future<void> _navigateToVideoEditor({Uint8List? bytes, String? path, required String fileName}) async {
     if (kIsWeb) {
-      print('Video editing is not supported on the web.');
+      _logger.warning('Video editing is not supported on the web.');
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video editing is not supported on the web.')));
       return;
     }
@@ -989,9 +996,9 @@ class _HomePageState extends ConsumerState<HomePage> {
         tempFile = File('${tempDir.path}/$tempFileName');
         await tempFile.writeAsBytes(bytes);
         videoPath = tempFile.path;
-        print('Saved video bytes to temporary file: $videoPath');
+        _logger.info('Saved video bytes to temporary file: $videoPath');
       } catch (e) {
-        print('Error saving video bytes to temporary file: $e');
+        _logger.severe('Error saving video bytes to temporary file', e);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error preparing video for editing: $e')));
         return;
@@ -1017,9 +1024,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     if (tempFile != null) {
       try {
         await tempFile.delete();
-        print('Deleted temporary video file: ${tempFile.path}');
+        _logger.info('Deleted temporary video file: ${tempFile.path}');
       } catch (e) {
-        print('Error deleting temporary video file: $e');
+        _logger.warning('Error deleting temporary video file', e);
       }
     }
     if (!mounted) {
@@ -1029,11 +1036,12 @@ class _HomePageState extends ConsumerState<HomePage> {
       return;
     }
     if (exportConfig != null) {
-      print('Video editing confirmed. Preparing FFmpeg execution...');
-      print('Command: ${exportConfig.command}');
-      print('Output Path: ${exportConfig.outputPath}');
+      _logger.info('Video editing confirmed. Preparing FFmpeg execution...');
+      _logger.info('Command: ${exportConfig.command}');
+      _logger.info('Output Path: ${exportConfig.outputPath}');
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Processing video... This may take a moment.')));
+
       await FFmpegKit.executeAsync(
         exportConfig.command,
         (FFmpegSession session) async {
@@ -1045,15 +1053,15 @@ class _HomePageState extends ConsumerState<HomePage> {
             _isSending = false;
           });
           if (ReturnCode.isSuccess(returnCode)) {
-            print('FFmpeg process completed successfully.');
+            _logger.info('FFmpeg process completed successfully.');
             final editedVideoPath = exportConfig.outputPath;
             final editedFileName = editedVideoPath.split(Platform.pathSeparator).last;
             _setPickedFile(bytes: null, path: editedVideoPath, name: editedFileName);
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video processed successfully! Ready to send.')));
           } else {
-            print('FFmpeg process failed with state $state and rc $returnCode.');
+            _logger.severe('FFmpeg process failed with state $state and rc $returnCode.');
             if (failStackTrace != null) {
-              print('FFmpeg failure stack trace: $failStackTrace');
+              _logger.severe('FFmpeg failure stack trace: $failStackTrace');
             }
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error processing video. Code: $returnCode')));
             setState(() {
@@ -1067,7 +1075,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         (Statistics statistics) {},
       );
     } else {
-      print('Video editing cancelled.');
+      _logger.info('Video editing cancelled.');
       setState(() {
         _selectedFilePath = null;
         _selectedFileName = null;
@@ -1084,7 +1092,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       _selectedFilePath = path;
       _selectedFileName = name;
     });
-    print('Selected file: $name ${bytes != null ? "(from bytes)" : "(from path)"}');
+    _logger.info('Selected file: $name ${bytes != null ? "(from bytes)" : "(from path)"}');
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Selected: $name. Tap a device to send.')));
   }
@@ -1098,61 +1106,62 @@ class _HomePageState extends ConsumerState<HomePage> {
       final String? scanResult = await Navigator.push<String>(context, MaterialPageRoute(builder: (context) => const QrScannerPage()));
       if (!mounted) return;
       if (scanResult == null) {
-        print('QR Code scan cancelled or failed.');
+        _logger.info('QR Code scan cancelled or failed.');
         return;
       }
       setState(() {
         _scanResult = scanResult;
       });
-      print('QR Code Scanned: $_scanResult');
+      _logger.info('QR Code Scanned: $_scanResult');
       try {
         final Map<String, dynamic> data = jsonDecode(_scanResult!);
         final String? ip = data['ip'] as String?;
         final int? port = data['port'] as int?; // Keep port if available in QR
         final String? alias = data['alias'] as String?;
-        if (ip != null && alias != null) { // Port might be optional or fixed
+        if (ip != null && alias != null) {
+          // Port might be optional or fixed
           final scannedDevice = DeviceInfo(ip: ip, port: port ?? 2706, alias: alias); // Use default port if missing
           final deviceData = {'ip': ip, 'name': alias}; // Data for provider
           if (!mounted) return;
           showDialog(
             context: context,
-            builder:
-                (context) => AlertDialog(
-                  title: Text('Device Found: ${scannedDevice.alias}'),
-                  content: Text('IP: ${scannedDevice.ip}:${scannedDevice.port}\n\nSend current selection or add to favorites?'),
-                  actions: [
-                    TextButton(
-                      child: const Text('Add Favorite'),
-                      onPressed: () async { // Make async
-                        Navigator.of(context).pop();
-                        // Use provider to add favorite
-                        await ref.read(settingsProvider.notifier).addFavoriteDevice(deviceData);
-                        if (mounted) {
-                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${scannedDevice.alias} to favorites.')));
-                        }
-                      },
-                    ),
-                    TextButton(
-                      child: const Text('Send'),
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        _initiateSend(scannedDevice);
-                      },
-                    ),
-                    TextButton(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop()),
-                  ],
+            builder: (context) => AlertDialog(
+              title: Text('Device Found: ${scannedDevice.alias}'),
+              content: Text('IP: ${scannedDevice.ip}:${scannedDevice.port}\n\nSend current selection or add to favorites?'),
+              actions: [
+                TextButton(
+                  child: const Text('Add Favorite'),
+                  onPressed: () async {
+                    // Make async
+                    Navigator.of(context).pop();
+                    // Use provider to add favorite
+                    await ref.read(settingsProvider.notifier).addFavoriteDevice(deviceData);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${scannedDevice.alias} to favorites.')));
+                    }
+                  },
                 ),
+                TextButton(
+                  child: const Text('Send'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _initiateSend(scannedDevice);
+                  },
+                ),
+                TextButton(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop()),
+              ],
+            ),
           );
         } else {
           throw const FormatException('Invalid QR code data format (missing ip, port, or alias).');
         }
       } catch (e) {
-        print('Error processing scanned QR code: $e');
+        _logger.warning('Error processing scanned QR code', e);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invalid QR data. Scanned: "$_scanResult"')));
       }
     } catch (e) {
-      print('Error during QR scan or processing: $e');
+      _logger.severe('Error during QR scan or processing', e);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error scanning QR code: $e')));
     }

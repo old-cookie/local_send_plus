@@ -10,7 +10,6 @@ ColorScheme? colorSchemeLight;
 ColorScheme? colorSchemeDark;
 
 /// Resets the system navigation bar and status bar appearance
-/// 
 /// Parameters:
 ///   - context: The build context
 ///   - prefs: Encrypted shared preferences instance
@@ -25,7 +24,8 @@ Future<void> resetSystemNavigation(
   Color? statusBarColor,
   Color? systemNavigationBarColor,
   Duration? delay,
-}) async { // Make function async
+}) async {
+  // Make function async
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     if (delay != null) {
       await Future.delayed(delay);
@@ -49,10 +49,8 @@ Future<void> resetSystemNavigation(
 }
 
 /// Modifies the base theme with custom transition animations
-/// 
 /// Parameters:
 ///   - theme: The base theme to modify
-/// 
 /// Returns:
 ///   Modified ThemeData with custom page transitions
 ThemeData themeModifier(ThemeData theme) {
@@ -64,11 +62,9 @@ ThemeData themeModifier(ThemeData theme) {
 }
 
 /// Gets the current theme based on system settings and user preferences
-/// 
 /// Parameters:
 ///   - context: The build context
 ///   - prefs: Encrypted shared preferences instance
-/// 
 /// Returns:
 ///   The appropriate ThemeData based on current settings
 Future<ThemeData> themeCurrent(BuildContext context, EncryptedSharedPreferencesAsync prefs) async {
@@ -89,10 +85,8 @@ Future<ThemeData> themeCurrent(BuildContext context, EncryptedSharedPreferencesA
 }
 
 /// Gets the light theme configuration
-/// 
 /// Parameters:
 ///   - prefs: Encrypted shared preferences instance
-/// 
 /// Returns:
 ///   Light theme configuration with appropriate color scheme
 Future<ThemeData> themeLight(EncryptedSharedPreferencesAsync prefs) async {
@@ -119,10 +113,8 @@ Future<ThemeData> themeLight(EncryptedSharedPreferencesAsync prefs) async {
 }
 
 /// Gets the dark theme configuration
-/// 
 /// Parameters:
 ///   - prefs: Encrypted shared preferences instance
-/// 
 /// Returns:
 ///   Dark theme configuration with appropriate color scheme
 Future<ThemeData> themeDark(EncryptedSharedPreferencesAsync prefs) async {
@@ -149,10 +141,8 @@ Future<ThemeData> themeDark(EncryptedSharedPreferencesAsync prefs) async {
 }
 
 /// Gets the current theme mode from preferences
-/// 
 /// Parameters:
 ///   - prefs: Encrypted shared preferences instance
-/// 
 /// Returns:
 ///   ThemeMode based on user preferences (system, light, or dark)
 Future<ThemeMode> themeMode(EncryptedSharedPreferencesAsync prefs) async {

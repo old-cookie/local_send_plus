@@ -3,9 +3,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:encrypt_shared_preferences/provider.dart';
-import 'package:device_info_plus/device_info_plus.dart'; // Added for device name
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:local_send_plus/main.dart' show sharedPreferencesProvider;
-import 'package:local_send_plus/services/nfc_service.dart'; // Import NfcService
+import 'package:local_send_plus/services/nfc_service.dart';
+import 'package:logging/logging.dart';
+
+final _logger = Logger('SettingsProvider');
 
 // --- NFC Service Providers ---
 
@@ -17,7 +20,6 @@ final nfcAvailabilityProvider = FutureProvider<bool>((ref) async {
   final nfcService = ref.watch(nfcServiceProvider);
   return await nfcService.isNfcAvailable();
 });
-
 
 // --- Settings State and Notifier ---
 
@@ -88,12 +90,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           .map((item) => item.map((key, value) => MapEntry(key.toString(), value.toString()))) // Convert keys/values to strings
           .toList();
     } catch (e) {
-      print("Error decoding favorite devices: $e");
+      _logger.warning("Error decoding favorite devices: $e");
       // If decoding fails, start with an empty list and save it
       await prefs.setString(_prefFavoriteDevices, '[]');
     }
-
-    // No need to save alias again here, it's done above if it was null
 
     return SettingsState(
       alias: alias, // Now guaranteed non-null
@@ -122,7 +122,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         return Platform.localHostname;
       }
     } catch (e) {
-      print("Error getting device name for default alias: $e");
+      _logger.warning("Error getting device name for default alias: $e", e);
     }
     // Fallback
     return 'LocalSend Device';
@@ -132,19 +132,18 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   // This avoids making the StateNotifierProvider setup async, which is complex.
   // The actual loaded state comes from settingsFutureProvider.
   static String _generateDefaultAliasSyncFallback() {
-     try {
-       if (kIsWeb) return 'Web Browser';
-       if (Platform.isAndroid) return 'Android Device';
-       if (Platform.isIOS) return 'iOS Device';
-       if (Platform.isLinux) return Platform.localHostname;
-       if (Platform.isMacOS) return Platform.localHostname;
-       if (Platform.isWindows) return Platform.localHostname;
-     } catch (e) {
-       // Ignore error in sync fallback
-     }
-     return 'LocalSend Device';
-   }
-
+    try {
+      if (kIsWeb) return 'Web Browser';
+      if (Platform.isAndroid) return 'Android Device';
+      if (Platform.isIOS) return 'iOS Device';
+      if (Platform.isLinux) return Platform.localHostname;
+      if (Platform.isMacOS) return Platform.localHostname;
+      if (Platform.isWindows) return Platform.localHostname;
+    } catch (e) {
+      // Ignore error in sync fallback
+    }
+    return 'LocalSend Device';
+  }
 
   /// Sets a new device alias
   /// [newAlias] The new alias to set. Must not be empty.
@@ -179,7 +178,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   Future<void> addFavoriteDevice(Map<String, String> deviceData) async {
     // Avoid duplicates based on IP (or a combination if needed)
     if (state.favoriteDevices.any((fav) => fav['ip'] == deviceData['ip'])) {
-      print("Device already in favorites.");
+      _logger.info("Device already in favorites.");
       return; // Or update existing? For now, just skip duplicates.
     }
 
@@ -191,21 +190,21 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   /// Removes a device from favorites by matching IP
   /// [deviceData] Map containing device info, must include 'ip' key
   Future<void> removeFavoriteDevice(Map<String, String> deviceData) async {
-     // Ensure deviceData has an 'ip' key before proceeding
-     if (!deviceData.containsKey('ip')) {
-       print("Error: Attempted to remove favorite without an IP address.");
-       return;
-     }
-     final updatedFavorites = List<Map<String, String>>.from(state.favoriteDevices)
-       ..removeWhere((fav) => fav['ip'] == deviceData['ip']); // Match only IP for removal
-     await _prefs.setString(_prefFavoriteDevices, jsonEncode(updatedFavorites));
-     state = state.copyWith(favoriteDevices: updatedFavorites);
-     print("Notifier state updated. New favorites list: ${state.favoriteDevices}"); // <-- Add log
-   }
+    // Ensure deviceData has an 'ip' key before proceeding
+    if (!deviceData.containsKey('ip')) {
+      _logger.warning("Attempted to remove favorite without an IP address.");
+      return;
+    }
+    final updatedFavorites = List<Map<String, String>>.from(state.favoriteDevices)
+      ..removeWhere((fav) => fav['ip'] == deviceData['ip']); // Match only IP for removal
+    await _prefs.setString(_prefFavoriteDevices, jsonEncode(updatedFavorites));
+    state = state.copyWith(favoriteDevices: updatedFavorites);
+    _logger.fine("Notifier state updated. New favorites list: ${state.favoriteDevices}");
+  }
 }
 
 /// Provider that ensures settings are fully loaded before access
-/// Returns a Future<SettingsState> that completes when settings are loaded
+/// Returns a Future [SettingsState] that completes when settings are loaded
 final settingsFutureProvider = FutureProvider<SettingsState>((ref) async {
   // Assuming sharedPreferencesProvider is Provider<EncryptedSharedPreferencesAsync>
   // If it's FutureProvider<EncryptedSharedPreferencesAsync>, use .future
@@ -232,12 +231,14 @@ final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>(
   // The actual loaded state will be available via settingsFutureProvider or by watching settingsProvider itself AFTER the future completes.
   // The initial state here might be slightly out of sync until the future loads, but allows access to methods.
   // Use the synchronous fallback for the initial state here.
-  return SettingsNotifier(prefs, SettingsState(
-      alias: SettingsNotifier._generateDefaultAliasSyncFallback(), // Use sync fallback for initial state
-      useBiometricAuth: false,
-      favoriteDevices: [],
-      destinationDir: null,
-  ));
+  return SettingsNotifier(
+      prefs,
+      SettingsState(
+        alias: SettingsNotifier._generateDefaultAliasSyncFallback(), // Use sync fallback for initial state
+        useBiometricAuth: false,
+        favoriteDevices: [],
+        destinationDir: null,
+      ));
 });
 
 /// Provides convenient access to just the device alias

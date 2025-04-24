@@ -2,25 +2,31 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'package:logging/logging.dart';
 
 /// Represents the status of the model download process.
 enum DownloadStatus {
   /// Download has not started yet.
   notStarted,
+
   /// Download is currently in progress.
   downloading,
+
   /// Download has completed successfully.
   completed,
+
   /// An error occurred during download.
-  error
+  error,
 }
 
 /// Represents the state of the model download, including status, progress, and error messages.
 class ModelDownloadState {
   /// The current status of the download.
   final DownloadStatus status;
+
   /// The download progress, ranging from 0.0 to 1.0.
   final double progress;
+
   /// An optional error message if the download failed.
   final String? errorMessage;
 
@@ -44,12 +50,10 @@ class ModelDownloadState {
 
 /// Manages the state and logic for downloading AI models.
 class ModelDownloadNotifier extends StateNotifier<ModelDownloadState> {
-  /// Creates a new instance of [ModelDownloadNotifier].
   ModelDownloadNotifier() : super(const ModelDownloadState());
 
-  /// The Dio instance used for network requests.
+  final _logger = Logger('ModelDownloadNotifier');
   final Dio _dio = Dio();
-  /// A token to cancel the ongoing download request.
   CancelToken? _cancelToken;
 
   /// Starts downloading the model from the given [url] and saves it as [filename].
@@ -66,11 +70,11 @@ class ModelDownloadNotifier extends StateNotifier<ModelDownloadState> {
       final savePath = '${dir.path}/$filename';
       final file = File(savePath);
       if (await file.exists()) {
-        print("Model file already exists at $savePath");
+        _logger.info("Model file already exists at $savePath");
         state = state.copyWith(status: DownloadStatus.completed, progress: 1.0);
         return;
       }
-      print("Starting download from $url to $savePath");
+      _logger.info("Starting download from $url to $savePath");
       await _dio.download(
         url,
         savePath,
@@ -89,21 +93,21 @@ class ModelDownloadNotifier extends StateNotifier<ModelDownloadState> {
       );
       if (mounted) {
         state = state.copyWith(status: DownloadStatus.completed, progress: 1.0);
-        print("Download completed.");
+        _logger.info("Download completed.");
       }
     } on DioException catch (e) {
-      print("Download error: $e");
+      _logger.severe("Download error: $e");
       if (mounted) {
         if (CancelToken.isCancel(e)) {
           state = state.copyWith(status: DownloadStatus.notStarted, errorMessage: "Download cancelled.");
-          print("Download cancelled.");
+          _logger.info("Download cancelled.");
         } else {
           state = state.copyWith(status: DownloadStatus.error, errorMessage: "Download failed: ${e.message}");
         }
       }
       _cleanupFailedDownload(filename);
     } catch (e) {
-      print("Generic download error: $e");
+      _logger.severe("Generic download error: $e");
       if (mounted) {
         state = state.copyWith(status: DownloadStatus.error, errorMessage: "An unexpected error occurred: $e");
       }
@@ -123,10 +127,10 @@ class ModelDownloadNotifier extends StateNotifier<ModelDownloadState> {
       final file = File(savePath);
       if (await file.exists()) {
         await file.delete();
-        print("Deleted incomplete download file: $savePath");
+        _logger.info("Deleted incomplete download file: $savePath");
       }
     } catch (e) {
-      print("Error cleaning up failed download: $e");
+      _logger.severe("Error cleaning up failed download: $e");
     }
   }
 

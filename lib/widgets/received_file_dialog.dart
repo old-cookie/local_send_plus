@@ -10,6 +10,7 @@ import 'package:universal_html/html.dart' as html;
 import 'package:mime/mime.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_video_thumbnail_plus/flutter_video_thumbnail_plus.dart';
+import 'package:logging/logging.dart';
 
 /// A dialog widget that displays received file information and provides options to keep or delete the file.
 /// Shows a thumbnail preview for images and videos, and handles file operations across different platforms.
@@ -25,6 +26,7 @@ class ReceivedFileDialog extends ConsumerStatefulWidget {
 }
 
 class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
+  static final _logger = Logger('ReceivedFileDialog');
   bool _isLoadingThumbnail = true;
   String? _mimeType;
   Uint8List? _thumbnailData;
@@ -47,15 +49,15 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
       if (_mimeType?.startsWith('image/') ?? false) {
         final fileBytes = await File(widget.fileInfo.path).readAsBytes();
         data = await _decodeAndResizeImage(fileBytes);
-        print('Image thumbnail generated for ${widget.fileInfo.filename}');
+        _logger.info('Image thumbnail generated for ${widget.fileInfo.filename}');
       } else if (_mimeType?.startsWith('video/') ?? false) {
         data = await FlutterVideoThumbnailPlus.thumbnailData(video: widget.fileInfo.path, imageFormat: ImageFormat.jpeg, maxWidth: 100, quality: 75);
-        print('Video thumbnail generated for ${widget.fileInfo.filename}');
+        _logger.info('Video thumbnail generated for ${widget.fileInfo.filename}');
       } else {
-        print('Thumbnail generation not supported for MIME type: $_mimeType');
+        _logger.info('Thumbnail generation not supported for MIME type: $_mimeType');
       }
     } catch (e) {
-      print('Error generating thumbnail for ${widget.fileInfo.filename}: $e');
+      _logger.severe('Error generating thumbnail for ${widget.fileInfo.filename}', e);
       data = null;
     } finally {
       if (mounted) {
@@ -87,18 +89,18 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
       final file = File(widget.fileInfo.path);
       if (await file.exists()) {
         await file.delete();
-        print('File deleted: ${widget.fileInfo.path}');
+        _logger.info('File deleted: ${widget.fileInfo.path}');
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('File "${widget.fileInfo.filename}" deleted.')));
         }
       } else {
-        print('File not found for deletion: ${widget.fileInfo.path}');
+        _logger.warning('File not found for deletion: ${widget.fileInfo.path}');
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('File "${widget.fileInfo.filename}" not found.')));
         }
       }
     } catch (e) {
-      print('Error deleting file ${widget.fileInfo.path}: $e');
+      _logger.severe('Error deleting file ${widget.fileInfo.path}', e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error deleting file: $e')));
       }
@@ -121,7 +123,7 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
     final navigator = Navigator.of(context);
     try {
       if (kIsWeb) {
-        print('Web platform detected. Attempting browser download for ${widget.fileInfo.filename}');
+        _logger.info('Web platform detected. Attempting browser download for ${widget.fileInfo.filename}');
         final file = File(widget.fileInfo.path);
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
@@ -130,28 +132,27 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
           html.Url.revokeObjectUrl(url);
           message = 'Downloading "${widget.fileInfo.filename}"...';
           deleteOriginal = true;
-          print('Browser download initiated for ${widget.fileInfo.filename}');
+          _logger.info('Browser download initiated for ${widget.fileInfo.filename}');
         } else {
           message = 'Error: File not found for download.';
-          print('File not found for web download: ${widget.fileInfo.path}');
+          _logger.warning('File not found for web download: ${widget.fileInfo.path}');
         }
       } else {
-        // Native platforms: Use ImageGallerySaverPlus or keep in temp location
-        print('Native platform detected. Keep action for ${widget.fileInfo.filename}');
+        _logger.info('Native platform detected. Keep action for ${widget.fileInfo.filename}');
         message = 'File "${widget.fileInfo.filename}" kept in temporary location.'; // Default message
         if (_mimeType != null && (_mimeType!.startsWith('image/') || _mimeType!.startsWith('video/'))) {
-          print('Attempting to save ${widget.fileInfo.filename} to gallery...');
+          _logger.info('Attempting to save ${widget.fileInfo.filename} to gallery...');
           final result = await ImageGallerySaverPlus.saveFile(widget.fileInfo.path);
-          print('Gallery save result: $result');
+          _logger.info('Gallery save result: $result');
           if (result != null && result['isSuccess'] == true) {
             message = '${_mimeType!.startsWith('image/') ? 'Photo' : 'Video'} "${widget.fileInfo.filename}" saved to gallery.';
             deleteOriginal = true; // Delete original if saved to gallery
           } else {
             message = 'Failed to save "${widget.fileInfo.filename}" to gallery. Kept in temporary location.';
-            print('Gallery save failed or returned unexpected result: $result');
+            _logger.warning('Gallery save failed or returned unexpected result: $result');
           }
         } else {
-          print('File type ($_mimeType) is not an image or video. Keeping in temporary location.');
+          _logger.info('File type ($_mimeType) is not an image or video. Keeping in temporary location.');
         }
       }
       if (deleteOriginal) {
@@ -159,14 +160,14 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
           final originalFile = File(widget.fileInfo.path);
           if (await originalFile.exists()) {
             await originalFile.delete();
-            print('Deleted temporary file: ${widget.fileInfo.path}');
+            _logger.info('Deleted temporary file: ${widget.fileInfo.path}');
           }
         } catch (e) {
-          print('Error deleting temporary file ${widget.fileInfo.path}: $e');
+          _logger.severe('Error deleting temporary file ${widget.fileInfo.path}', e);
         }
       }
     } catch (e) {
-      print('Error during keep/save operation for ${widget.fileInfo.path}: $e');
+      _logger.severe('Error during keep/save operation for ${widget.fileInfo.path}', e);
       message = 'Error processing file: $e.';
     } finally {
       ref.read(receivedFileProvider.notifier).clearReceivedFile();
@@ -187,15 +188,14 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
           SizedBox(
             height: 100,
             width: 100,
-            child:
-                _isLoadingThumbnail
-                    ? const Center(child: CircularProgressIndicator())
-                    : _thumbnailData != null
+            child: _isLoadingThumbnail
+                ? const Center(child: CircularProgressIndicator())
+                : _thumbnailData != null
                     ? Image.memory(
-                      _thumbnailData!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.error_outline, size: 50, color: Colors.red)),
-                    )
+                        _thumbnailData!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.error_outline, size: 50, color: Colors.red)),
+                      )
                     : const Center(child: Icon(Icons.insert_drive_file, size: 50, color: Colors.grey)),
           ),
           const SizedBox(height: 16),

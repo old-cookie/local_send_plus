@@ -6,32 +6,25 @@ import 'package:flutter/foundation.dart';
 class DeviceInfo {
   /// The IP address of the device.
   final String ip;
-  
+
   /// The port number used for communication.
   final int port;
-  
+
   /// A user-friendly name for the device.
   final String alias;
-  
+
   /// Unique identifier for the device. Can be null.
   final String? deviceId;
 
   /// Creates a new [DeviceInfo] instance.
-  /// 
   /// Parameters:
   /// - [ip]: The IP address of the device
   /// - [port]: The port number for communication
   /// - [alias]: The display name of the device
   /// - [deviceId]: Optional unique identifier for the device
-  const DeviceInfo({
-    required this.ip,
-    required this.port,
-    required this.alias,
-    this.deviceId
-  });
+  const DeviceInfo({required this.ip, required this.port, required this.alias, this.deviceId});
 
   /// Creates a [DeviceInfo] instance from a JSON map.
-  /// 
   /// The JSON map must contain 'ip', 'port', and 'alias' keys.
   /// The 'deviceId' key is optional.
   factory DeviceInfo.fromJson(Map<String, dynamic> json) {
@@ -39,7 +32,6 @@ class DeviceInfo {
   }
 
   /// Converts this [DeviceInfo] instance to a JSON map.
-  /// 
   /// Returns a map containing all the device information.
   Map<String, dynamic> toJson() {
     return {'ip': ip, 'port': port, 'alias': alias, 'deviceId': deviceId};

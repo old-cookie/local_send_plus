@@ -1,21 +1,18 @@
-import 'dart:io'; // Used for file system operations like checking if a model file exists.
-import 'package:flutter/foundation.dart'; // Provides kIsWeb constant to check if running on the web.
-import 'package:flutter/material.dart'; // Flutter framework core widgets.
-import 'package:flutter_gemma/core/chat.dart'; // Core chat functionalities from the flutter_gemma package.
-import 'package:flutter_gemma/flutter_gemma.dart'; // Main entry point for the flutter_gemma package.
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // State management library.
-import 'package:path_provider/path_provider.dart'; // Used to get the application's documents directory path.
-import 'chat_widget.dart'; // Custom widget for displaying the chat interface.
-import 'loading_widget.dart'; // Custom widget for showing loading indicators.
-import 'models/model.dart'; // Defines the Model class used for AI model configuration.
-import 'providers/model_download_provider.dart'; // Provider for managing model download state.
-import 'widgets/model_download_widget.dart'; // Custom widget for displaying model download progress.
-
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_gemma/core/chat.dart';
+import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:logging/logging.dart';
+import 'chat_widget.dart';
+import 'loading_widget.dart';
+import 'models/model.dart';
+import 'providers/model_download_provider.dart';
+import 'widgets/model_download_widget.dart';
 
 /// A screen widget that provides a chat interface with a Gemma AI model.
-///
-/// This widget handles model download (if necessary), initialization,
-/// and interaction with the AI model through a chat interface.
 class ChatScreen extends ConsumerStatefulWidget {
   /// Creates a [ChatScreen].
   ///
@@ -31,11 +28,8 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 /// The state associated with the [ChatScreen] widget.
-///
-/// Manages the lifecycle of the Gemma chat instance, handles model download
-/// checks, initialization, and updates the UI based on the chat state.
 class ChatScreenState extends ConsumerState<ChatScreen> {
-  /// Instance of the Flutter Gemma plugin.
+  final _logger = Logger('ChatScreen');
   final _gemma = FlutterGemmaPlugin.instance;
 
   /// The active chat instance with the Gemma model. Null until initialized.
@@ -96,31 +90,31 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
     setState(() {
       _initializationError = null;
     });
-    print("Initializing Gemma with model path: $modelPath");
+    _logger.info("Initializing Gemma with model path: $modelPath");
     try {
       // Check if the model path points to an asset.
       if (modelPath.startsWith('assets/')) {
         // Extract the relative path for the asset installer.
         final relativeAssetPath = modelPath.replaceFirst('assets/', '');
-        print("Using installModelFromAsset with relative path: $relativeAssetPath");
+        _logger.info("Using installModelFromAsset with relative path: $relativeAssetPath");
         // Install the model from the app's assets.
         await _gemma.modelManager.installModelFromAsset(relativeAssetPath);
-        print("Model installed from asset successfully.");
+        _logger.info("Model installed from asset successfully.");
       } else {
         // If not an asset, assume it's a path to a downloaded file.
-        print("Using setModelPath for path: $modelPath");
+        _logger.info("Using setModelPath for path: $modelPath");
         // Set the path for the model manager.
         await _gemma.modelManager.setModelPath(modelPath);
-        print("Model path set successfully.");
+        _logger.info("Model path set successfully.");
       }
 
       // Create the Gemma model instance with specified configurations.
       final model = await _gemma.createModel(
-          modelType: widget.model.modelType,
-          preferredBackend: widget.model.preferredBackend,
-          maxTokens: 1024 // Maximum tokens for model responses.
-          );
-      print("Gemma model created.");
+        modelType: widget.model.modelType,
+        preferredBackend: widget.model.preferredBackend,
+        maxTokens: 1024, // Maximum tokens for model responses.
+      );
+      _logger.info("Gemma model created.");
 
       // Create the chat session using the model instance.
       _chat = await model.createChat(
@@ -130,7 +124,7 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
         topP: widget.model.topP, // Uses nucleus sampling based on probability mass.
         tokenBuffer: 256, // Buffer size for token processing.
       );
-      print("Gemma chat created successfully.");
+      _logger.info("Gemma chat created successfully.");
 
       // Update the UI if the widget is still mounted.
       if (mounted) {
@@ -138,7 +132,7 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
       }
     } catch (e) {
       // Handle any errors during initialization.
-      print("Error initializing Gemma: $e");
+      _logger.severe("Error initializing Gemma", e);
       if (mounted) {
         setState(() {
           _initializationError = "Failed to initialize AI model. Error: $e";
@@ -163,7 +157,7 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
       Future.microtask(() async {
         // Handle local asset models directly.
         if (widget.model.localModel) {
-          print("Local asset model selected. Skipping download check.");
+          _logger.info("Local asset model selected. Skipping download check.");
           if (mounted) {
             setState(() {
               _modelReadyForInitialization = true; // Mark as ready.
@@ -178,7 +172,7 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
         // Check if the model file already exists locally.
         final modelExists = await _checkIfModelExists();
         if (modelExists) {
-          print("Model file found locally.");
+          _logger.info("Model file found locally.");
           if (mounted) {
             setState(() {
               _modelReadyForInitialization = true; // Mark as ready.
@@ -189,7 +183,7 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
           }
         } else {
           // If the model doesn't exist, start the download.
-          print("Model file not found. Starting download...");
+          _logger.info("Model file not found. Starting download...");
           downloadNotifier.downloadModel(widget.model.url, widget.model.filename);
         }
       });
@@ -211,7 +205,7 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
     ref.listen<ModelDownloadState>(modelDownloadProvider, (previous, next) {
       // When download completes successfully.
       if (previous?.status != DownloadStatus.completed && next.status == DownloadStatus.completed) {
-        print("Download complete listener triggered.");
+        _logger.info("Download complete listener triggered.");
         if (mounted) {
           setState(() {
             _modelReadyForInitialization = true; // Mark as ready.
@@ -225,7 +219,7 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
       }
       // Handle retry logic if a download error occurred and was reset.
       if (previous?.status == DownloadStatus.error && next.status == DownloadStatus.notStarted) {
-        print("Retry detected. Re-triggering download.");
+        _logger.info("Retry detected. Re-triggering download.");
         // Re-trigger the download.
         Future.microtask(() {
           downloadNotifier.downloadModel(widget.model.url, widget.model.filename);
