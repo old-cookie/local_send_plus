@@ -42,7 +42,8 @@ dependencies:
   pretty_qr_code: ^3.4.0
   mobile_scanner: ^6.0.10
   encrypt_shared_preferences: ^0.9.9
-
+  nfc_manager: ^3.5.0
+  
 dependency_overrides:
   video_thumbnail:
     git:

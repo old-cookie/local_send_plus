@@ -32,11 +32,11 @@ import 'package:local_send_plus/pages/settings_page.dart';
 import 'package:local_send_plus/features/ai_chat/chat_screen.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
 // Import main.dart provider instead of settings_provider's local one
-import 'package:local_send_plus/main.dart' show sharedPreferencesProvider;
-import 'package:local_send_plus/providers/settings_provider.dart';
+import 'package:local_send_plus/providers/settings_provider.dart'; // Includes NFC providers now
 import 'package:local_send_plus/features/server/server_provider.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:local_send_plus/pages/qr_scanner_page.dart';
+import 'package:local_send_plus/services/nfc_service.dart'; // Explicit import for clarity if needed
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -52,8 +52,8 @@ class _HomePageState extends ConsumerState<HomePage> {
   final TextEditingController _ipController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _textController = TextEditingController();
-  List<DeviceInfo> _favorites = [];
-  static const String _favoritesPrefKey = 'favorite_devices';
+  // Remove local _favorites list - use provider directly
+  // static const String _favoritesPrefKey = 'favorite_devices';
   StreamSubscription? _receivedFileSubscription;
   StreamSubscription? _receivedTextSubscription;
   DiscoveryService? _discoveryService;
@@ -64,7 +64,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
-    _loadFavorites();
+    // Remove _loadFavorites(); - favorites are loaded via provider
     _fetchLocalIp();
     Future.microtask(() async {
       if (!mounted) return;
@@ -143,32 +143,75 @@ class _HomePageState extends ConsumerState<HomePage> {
     } catch (e) {
       print("Failed to get local IP: $e");
       if (mounted) {
+        // Optionally show a snackbar or log error to UI if needed
+        // ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not get IP address: $e')));
       }
     }
   }
 
-  Future<void> _loadFavorites() async {
-    // Use the provider from main.dart
-    final prefs = ref.read(sharedPreferencesProvider);
-    // Await getStringList
-    final List<String>? favoritesJson = await prefs.getStringList(_favoritesPrefKey);
-    if (favoritesJson != null) {
-      if (!mounted) return;
-      setState(() {
-        _favorites = favoritesJson.map((json) => DeviceInfo.fromJson(jsonDecode(json))).toList();
-      });
-    }
+  // --- Add NFC Dialog Method ---
+  Future<void> _showNfcDialog(BuildContext context, WidgetRef ref) async {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return SimpleDialog(
+          title: const Text('NFC Actions'),
+          children: <Widget>[
+            SimpleDialogOption(
+              onPressed: () async {
+                Navigator.pop(dialogContext); // Close the dialog first
+                // Call the write method from the service
+                await ref.read(nfcServiceProvider).writeNdef(context);
+              },
+              child: const ListTile(
+                leading: Icon(Icons.upload_file),
+                title: Text('Send Device Info via NFC'),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () async {
+                 Navigator.pop(dialogContext); // Close the dialog first
+                 // Call the read method, passing the callback to add to favorites
+                 await ref.read(nfcServiceProvider).readNdef(context, (data) {
+                    print("NFC Read Callback: Received data: $data"); // <-- Add log
+                    // Use the main settingsProvider notifier to add the favorite
+                    try {
+                      ref.read(settingsProvider.notifier).addFavoriteDevice(data);
+                      print("NFC Read Callback: Called addFavoriteDevice successfully."); // <-- Add log
+                      // Optionally show a confirmation SnackBar here if NfcService doesn't
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Added ${data['name']} (${data['ip']}) to favorites via NFC.'))
+                      );
+                    } catch (e) {
+                       print("NFC Read Callback: Error calling addFavoriteDevice: $e"); // <-- Add log
+                       ScaffoldMessenger.of(context).showSnackBar(
+                         SnackBar(content: Text('Error adding favorite via NFC: $e'))
+                       );
+                    }
+                 });
+              },
+              child: const ListTile(
+                leading: Icon(Icons.download_for_offline),
+                title: Text('Receive Device Info via NFC'),
+                subtitle: Text('Adds received device to favorites'),
+              ),
+            ),
+             SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(dialogContext); // Just close the dialog
+              },
+              child: const Text('Cancel', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+            ),
+          ],
+        );
+      },
+    );
   }
+  // --- End NFC Dialog Method ---
 
-  Future<void> _saveFavorites() async {
-    // Use the provider from main.dart
-    final prefs = ref.read(sharedPreferencesProvider);
-    final List<String> favoritesJson = _favorites.map((device) => jsonEncode(device.toJson())).toList();
-    // Await setStringList
-    await prefs.setStringList(_favoritesPrefKey, favoritesJson);
-  }
+  // Remove _loadFavorites and _saveFavorites - managed by SettingsNotifier
 
-  Future<bool> _addFavorite() async {
+  Future<bool> _addFavoriteManually() async { // Renamed to avoid conflict if needed
     final String ip = _ipController.text.trim();
     final String name = _nameController.text.trim();
     if (!mounted) return false;
@@ -182,24 +225,28 @@ class _HomePageState extends ConsumerState<HomePage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid IP address format.')));
       return false;
     }
-    const int port = 2706;
-    final newFavorite = DeviceInfo(ip: ip, port: port, alias: name);
-    if (_favorites.any((fav) => fav.ip == newFavorite.ip && fav.port == newFavorite.port)) {
+    // Use the SettingsNotifier to add the favorite
+    final deviceData = {'ip': ip, 'name': name}; // Assuming port is fixed or handled elsewhere
+    // Rely on the check within addFavoriteDevice in the provider
+
+    print("Attempting to add favorite: $deviceData"); // <-- Add log
+    try {
+      await ref.read(settingsProvider.notifier).addFavoriteDevice(deviceData);
+      print("Successfully called addFavoriteDevice for: $deviceData"); // <-- Add log
+    } catch (e) {
+      print("Error calling addFavoriteDevice: $e"); // <-- Add log for potential errors
       if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Device ${newFavorite.ip}:${newFavorite.port} already in favorites.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error adding favorite: $e')));
       return false;
     }
+
     if (!mounted) return false;
-    setState(() {
-      _favorites.add(newFavorite);
-      _ipController.clear();
-      _nameController.clear();
-      FocusScope.of(context).unfocus();
-    });
-    await _saveFavorites();
-    if (!mounted) return false;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${newFavorite.alias} to favorites.')));
-    return true;
+    // Clear fields and unfocus after successful add
+    _ipController.clear();
+    _nameController.clear();
+    FocusScope.of(context).unfocus();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added $name to favorites.')));
+    return true; // Indicate success
   }
 
   Future<void> _initiateSend(DeviceInfo targetDevice) async {
@@ -329,9 +376,10 @@ class _HomePageState extends ConsumerState<HomePage> {
       } else {
         thumbnailWidget = const Icon(Icons.video_file_outlined, size: 50);
       }
-    } else {
+    } else { // Add the missing else block for other file types
       thumbnailWidget = const Icon(Icons.insert_drive_file_outlined, size: 50);
     }
+    // Move the return Padding inside the method
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Column(
@@ -375,32 +423,88 @@ class _HomePageState extends ConsumerState<HomePage> {
             },
             tooltip: 'Refresh Devices',
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            tooltip: 'More Options',
-            onSelected: (String result) {
-              switch (result) {
-                case 'scan_qr':
-                  _scanQrCode();
-                  break;
-                case 'ai_chat':
-                  if (!mounted) return;
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen()));
-                  break;
-                case 'settings':
-                  if (!mounted) return;
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()));
-                  break;
-              }
-            },
-            itemBuilder:
-                (BuildContext context) => <PopupMenuEntry<String>>[
-                  if (!kIsWeb)
-                    const PopupMenuItem<String>(value: 'scan_qr', child: ListTile(leading: Icon(Icons.qr_code_scanner), title: Text('Scan QR'))),
-                  if (!kIsWeb)
-                    const PopupMenuItem<String>(value: 'ai_chat', child: ListTile(leading: Icon(Icons.chat_bubble_outline), title: Text('AI Chat'))),
-                  const PopupMenuItem<String>(value: 'settings', child: ListTile(leading: Icon(Icons.settings), title: Text('Settings'))),
-                ],
+          // Wrap the PopupMenuButton with a Consumer to provide ref
+          Consumer(
+            builder: (context, ref, child) {
+              // Watch the provider *outside* the itemBuilder
+              final nfcAvailableAsync = ref.watch(nfcAvailabilityProvider);
+              return PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                tooltip: 'More Options',
+                onSelected: (String result) {
+                  // ref is available in this scope from the Consumer builder
+                  switch (result) {
+                    case 'nfc_actions': _showNfcDialog(context, ref); break;
+                    case 'scan_qr': _scanQrCode(); break;
+                    case 'ai_chat': if (!mounted) return; Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen())); break;
+                    case 'settings': if (!mounted) return; Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage())); break;
+                  }
+                },
+                // Pass the state down to itemBuilder
+                itemBuilder: (BuildContext context) {
+                  final List<PopupMenuEntry<String>> items = [];
+
+                  // Use the state captured by the Consumer's builder
+                  nfcAvailableAsync.when(
+                    data: (isAvailable) {
+                      if (isAvailable) {
+                        items.add(const PopupMenuItem<String>(
+                          value: 'nfc_actions',
+                          child: ListTile(leading: Icon(Icons.nfc), title: Text('NFC Send/Receive')),
+                        ));
+                      }
+                    },
+                    loading: () {
+                      items.add(const PopupMenuItem<String>(
+                        enabled: false,
+                        child: ListTile(
+                          leading: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                          title: Text('Checking NFC...'),
+                        ),
+                      ));
+                    },
+                    error: (err, stack) {
+                      items.add(PopupMenuItem<String>(
+                        enabled: false,
+                        child: ListTile(
+                          leading: Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+                          title: const Text('NFC Error'),
+                        ),
+                      ));
+                    },
+                  );
+
+                  // Add other items conditionally, adding dividers
+                  bool needsDivider = items.isNotEmpty && items.last is! PopupMenuDivider;
+
+                  if (!kIsWeb) {
+                    if (needsDivider) items.add(const PopupMenuDivider());
+                    items.add(const PopupMenuItem<String>(
+                      value: 'scan_qr',
+                      child: ListTile(leading: Icon(Icons.qr_code_scanner), title: Text('Scan QR')),
+                    ));
+                    needsDivider = true;
+                  }
+
+                  if (!kIsWeb) {
+                    if (needsDivider) items.add(const PopupMenuDivider());
+                    items.add(const PopupMenuItem<String>(
+                      value: 'ai_chat',
+                      child: ListTile(leading: Icon(Icons.chat_bubble_outline), title: Text('AI Chat')),
+                    ));
+                    needsDivider = true;
+                  }
+
+                  if (needsDivider) items.add(const PopupMenuDivider());
+                  items.add(const PopupMenuItem<String>(
+                    value: 'settings',
+                    child: ListTile(leading: Icon(Icons.settings), title: Text('Settings')),
+                  ));
+
+                  return items;
+                },
+              );
+            }
           ),
         ],
       ),
@@ -430,19 +534,22 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                     ),
                   ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
+                Visibility( // Hide text field when a file is selected
+                  visible: _selectedFileName == null,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
                         controller: _textController,
                         maxLines: null,
                         decoration: const InputDecoration(
                           labelText: 'Enter Text to Send',
                           border: OutlineInputBorder(),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -469,10 +576,12 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
           ),
           _buildSelectedFileThumbnail(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 48.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          Visibility( // Hide when keyboard is visible
+            visible: MediaQuery.of(context).viewInsets.bottom == 0,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 48.0), // Adjusted bottom padding if needed when hidden
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 if (kIsWeb)
                   ElevatedButton.icon(
@@ -521,9 +630,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                           );
                         },
                       );
-                    },
-                  ),
-              ],
+                      },
+                    ),
+                ],
+              ),
             ),
           ),
         ],
@@ -532,13 +642,21 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _showFavoritesDialog() async {
-    await _loadFavorites();
+    // No need to await _loadFavorites(); - read directly from provider
     if (!mounted) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
+        // Use Consumer instead of StatefulBuilder to react to provider changes
+        return Consumer(
+          builder: (context, ref, child) {
+            // Read the current favorites list from the provider
+            final favoritesList = ref.watch(favoriteDevicesProvider);
+            print("Favorites Dialog Consumer rebuilt. Received list: $favoritesList"); // <-- Add log
+            // Convert List<Map<String, String>> to List<DeviceInfo> for compatibility
+            // Assuming a fixed port or handle differently if port varies
+            final favorites = favoritesList.map((fav) => DeviceInfo(ip: fav['ip']!, port: 2706, alias: fav['name']!)).toList();
+
             return AlertDialog(
               title: const Text('Favorite Devices'),
               content: SingleChildScrollView(
@@ -562,24 +680,25 @@ class _HomePageState extends ConsumerState<HomePage> {
                         icon: const Icon(Icons.add_circle_outline),
                         label: const Text('Add Favorite'),
                         onPressed: () async {
-                          final success = await _addFavorite();
-                          if (success && mounted) {
-                            setDialogState(() {});
-                          }
+                          // Call the updated manual add method
+                          await _addFavoriteManually();
+                          // No need for setDialogState, Consumer rebuilds automatically
                         },
                       ),
                       const Divider(height: 24),
-                      _favorites.isEmpty
+                      favorites.isEmpty // Use the list from the provider
                           ? const Center(child: Padding(padding: EdgeInsets.symmetric(vertical: 16.0), child: Text('No favorites added yet.')))
                           : ListView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _favorites.length,
+                            itemCount: favorites.length, // Use the list from the provider
                             itemBuilder: (context, index) {
-                              if (index < 0 || index >= _favorites.length) {
+                              if (index < 0 || index >= favorites.length) { // Use the list from the provider
                                 return const SizedBox.shrink();
                               }
-                              final device = _favorites[index];
+                              final device = favorites[index]; // Use the list from the provider
+                              // Convert DeviceInfo back to Map for removal function if needed
+                              final deviceData = {'ip': device.ip, 'name': device.alias};
                               return ListTile(
                                 leading: const Icon(Icons.star),
                                 title: Text(device.alias),
@@ -588,18 +707,22 @@ class _HomePageState extends ConsumerState<HomePage> {
                                   icon: const Icon(Icons.delete_outline, color: Colors.red),
                                   tooltip: 'Remove Favorite',
                                   onPressed: () async {
+                                    print("Attempting to remove favorite with data: $deviceData"); // <-- Add log
                                     final scaffoldMessenger = ScaffoldMessenger.of(context);
                                     final removedDeviceAlias = device.alias;
                                     if (!mounted) return;
-                                    setDialogState(() {
-                                      if (index >= 0 && index < _favorites.length) {
-                                        _favorites.removeAt(index);
-                                      }
-                                    });
-                                    if (!mounted) return;
-                                    await _saveFavorites();
-                                    if (!mounted) return;
-                                    scaffoldMessenger.showSnackBar(SnackBar(content: Text('Removed $removedDeviceAlias from favorites.')));
+                                    try {
+                                      // Call the provider's remove method
+                                      await ref.read(settingsProvider.notifier).removeFavoriteDevice(deviceData);
+                                      print("Successfully called removeFavoriteDevice for: $deviceData"); // <-- Add log
+                                      if (!mounted) return;
+                                      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Removed $removedDeviceAlias from favorites.')));
+                                    } catch (e) {
+                                      print("Error calling removeFavoriteDevice: $e"); // <-- Add log for potential errors
+                                      if (!mounted) return;
+                                      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error removing favorite: $e')));
+                                    }
+                                    // No need for setDialogState
                                   },
                                 ),
                                 onTap:
@@ -628,7 +751,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
               ],
             );
-          },
+          }, // End Consumer builder
         );
       },
     );
@@ -968,10 +1091,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       try {
         final Map<String, dynamic> data = jsonDecode(_scanResult!);
         final String? ip = data['ip'] as String?;
-        final int? port = data['port'] as int?;
+        final int? port = data['port'] as int?; // Keep port if available in QR
         final String? alias = data['alias'] as String?;
-        if (ip != null && port != null && alias != null) {
-          final scannedDevice = DeviceInfo(ip: ip, port: port, alias: alias);
+        if (ip != null && alias != null) { // Port might be optional or fixed
+          final scannedDevice = DeviceInfo(ip: ip, port: port ?? 2706, alias: alias); // Use default port if missing
+          final deviceData = {'ip': ip, 'name': alias}; // Data for provider
           if (!mounted) return;
           showDialog(
             context: context,
@@ -982,15 +1106,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                   actions: [
                     TextButton(
                       child: const Text('Add Favorite'),
-                      onPressed: () {
+                      onPressed: () async { // Make async
                         Navigator.of(context).pop();
-                        _ipController.text = scannedDevice.ip;
-                        _nameController.text = scannedDevice.alias;
-                        _addFavorite().then((success) {
-                          if (success && mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${scannedDevice.alias} to favorites.')));
-                          }
-                        });
+                        // Use provider to add favorite
+                        await ref.read(settingsProvider.notifier).addFavoriteDevice(deviceData);
+                        if (mounted) {
+                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${scannedDevice.alias} to favorites.')));
+                        }
                       },
                     ),
                     TextButton(

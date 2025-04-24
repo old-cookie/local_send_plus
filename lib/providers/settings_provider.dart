@@ -1,47 +1,117 @@
+import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:encrypt_shared_preferences/provider.dart';
-// Import main.dart to access its sharedPreferencesProvider
+import 'package:device_info_plus/device_info_plus.dart'; // Added for device name
 import 'package:local_send_plus/main.dart' show sharedPreferencesProvider;
+import 'package:local_send_plus/services/nfc_service.dart'; // Import NfcService
 
-const String prefDeviceAlias = 'pref_device_alias';
-const String prefDestinationDir = 'pref_destination_dir';
-const String prefUseBiometricAuth = 'pref_use_biometric_auth';
+// --- NFC Service Providers ---
 
+// Provider for the NfcService instance
+final nfcServiceProvider = Provider<NfcService>((ref) => NfcService());
 
-
-// Update provider to watch the correct provider and load initial state
-final deviceAliasProvider = StateNotifierProvider<DeviceAliasNotifier, String>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return DeviceAliasNotifier(prefs)..loadInitialAlias();
+// Provider to check NFC availability (async)
+final nfcAvailabilityProvider = FutureProvider<bool>((ref) async {
+  final nfcService = ref.watch(nfcServiceProvider);
+  return await nfcService.isNfcAvailable();
 });
 
-class DeviceAliasNotifier extends StateNotifier<String> {
-  // Update type to EncryptedSharedPreferencesAsync
+
+// --- Settings State and Notifier ---
+
+const String _prefDeviceAlias = 'pref_device_alias';
+const String _prefDestinationDir = 'pref_destination_dir';
+const String _prefUseBiometricAuth = 'pref_use_biometric_auth';
+const String _prefFavoriteDevices = 'pref_favorite_devices'; // Key for favorites
+
+// Represents the state of all settings
+class SettingsState {
+  final String alias;
+  final String? destinationDir;
+  final bool useBiometricAuth;
+  final List<Map<String, String>> favoriteDevices; // List of {ip: '...', name: '...'}
+
+  SettingsState({
+    required this.alias,
+    this.destinationDir,
+    required this.useBiometricAuth,
+    required this.favoriteDevices,
+  });
+
+  SettingsState copyWith({
+    String? alias,
+    String? destinationDir,
+    bool? useBiometricAuth,
+    List<Map<String, String>>? favoriteDevices,
+    bool clearDestinationDir = false, // Flag to explicitly set destinationDir to null
+  }) {
+    return SettingsState(
+      alias: alias ?? this.alias,
+      destinationDir: clearDestinationDir ? null : destinationDir ?? this.destinationDir,
+      useBiometricAuth: useBiometricAuth ?? this.useBiometricAuth,
+      favoriteDevices: favoriteDevices ?? this.favoriteDevices,
+    );
+  }
+}
+
+// Manages the SettingsState
+class SettingsNotifier extends StateNotifier<SettingsState> {
   final EncryptedSharedPreferencesAsync _prefs;
+  static final DeviceInfoPlugin _deviceInfoPlugin = DeviceInfoPlugin(); // Instance for device info
 
-  // Provide default alias synchronously
-  DeviceAliasNotifier(this._prefs) : super(_generateDefaultAlias());
+  SettingsNotifier(this._prefs, SettingsState initialState) : super(initialState);
 
-  // Load initial alias asynchronously
-  Future<void> loadInitialAlias() async {
-    // Await getString and provide default
-    final initialAlias = await _prefs.getString(prefDeviceAlias, defaultValue: _generateDefaultAlias());
-    if (state != initialAlias) { // Update only if different from default
-      state = initialAlias!; // Use null assertion as default is provided
+  // Load all settings asynchronously
+  static Future<SettingsState> loadInitialState(EncryptedSharedPreferencesAsync prefs) async {
+    // Load existing alias or generate default if null
+    String? alias = await prefs.getString(_prefDeviceAlias);
+    if (alias == null) {
+      alias = await _generateDefaultAlias();
+      // Save the newly generated default alias
+      await prefs.setString(_prefDeviceAlias, alias);
     }
-    // Ensure a value is saved if it wasn't already
-    if (await _prefs.getString(prefDeviceAlias) == null) {
-       await _prefs.setString(prefDeviceAlias, state);
+
+    final destinationDir = await prefs.getString(_prefDestinationDir);
+    final useBiometricAuth = await prefs.getBool(_prefUseBiometricAuth, defaultValue: false);
+
+    // Load favorite devices
+    final favoritesJson = await prefs.getString(_prefFavoriteDevices, defaultValue: '[]');
+    List<Map<String, String>> favoriteDevices = [];
+    try {
+      List<dynamic> decodedList = jsonDecode(favoritesJson!); // Non-null due to defaultValue
+      favoriteDevices = decodedList
+          .whereType<Map<dynamic, dynamic>>() // Ensure items are maps
+          .map((item) => item.map((key, value) => MapEntry(key.toString(), value.toString()))) // Convert keys/values to strings
+          .toList();
+    } catch (e) {
+      print("Error decoding favorite devices: $e");
+      // If decoding fails, start with an empty list and save it
+      await prefs.setString(_prefFavoriteDevices, '[]');
     }
+
+    // No need to save alias again here, it's done above if it was null
+
+    return SettingsState(
+      alias: alias, // Now guaranteed non-null
+      destinationDir: destinationDir,
+      useBiometricAuth: useBiometricAuth!, // Non-null due to defaultValue
+      favoriteDevices: favoriteDevices,
+    );
   }
 
-  static String _generateDefaultAlias() {
+  // Now async to fetch device info
+  static Future<String> _generateDefaultAlias() async {
     try {
-      if (Platform.isAndroid) {
-        return 'Android Device';
+      if (kIsWeb) {
+        return 'Web Browser';
+      } else if (Platform.isAndroid) {
+        final androidInfo = await _deviceInfoPlugin.androidInfo;
+        return androidInfo.model; // Use device model name
       } else if (Platform.isIOS) {
-        return 'iOS Device';
+        final iosInfo = await _deviceInfoPlugin.iosInfo;
+        return iosInfo.name; // Use user-assigned device name
       } else if (Platform.isLinux) {
         return Platform.localHostname;
       } else if (Platform.isMacOS) {
@@ -50,74 +120,140 @@ class DeviceAliasNotifier extends StateNotifier<String> {
         return Platform.localHostname;
       }
     } catch (e) {
-      print("Error generating default alias: $e");
+      print("Error getting device name for default alias: $e");
     }
+    // Fallback
     return 'LocalSend Device';
   }
 
+  // Static method for synchronous fallback (used for initial provider state)
+  // This avoids making the StateNotifierProvider setup async, which is complex.
+  // The actual loaded state comes from settingsFutureProvider.
+  static String _generateDefaultAliasSyncFallback() {
+     try {
+       if (kIsWeb) return 'Web Browser';
+       if (Platform.isAndroid) return 'Android Device';
+       if (Platform.isIOS) return 'iOS Device';
+       if (Platform.isLinux) return Platform.localHostname;
+       if (Platform.isMacOS) return Platform.localHostname;
+       if (Platform.isWindows) return Platform.localHostname;
+     } catch (e) {
+       // Ignore error in sync fallback
+     }
+     return 'LocalSend Device';
+   }
+
+
   Future<void> setAlias(String newAlias) async {
     if (newAlias.isNotEmpty) {
-      // Use await with EncryptedSharedPreferencesAsync
-      await _prefs.setString(prefDeviceAlias, newAlias);
-      state = newAlias;
-    }
-  }
-}
-
-// Update provider to watch the correct provider and load initial state
-final destinationDirectoryProvider = StateNotifierProvider<DestinationDirectoryNotifier, String?>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return DestinationDirectoryNotifier(prefs)..loadInitialDirectory();
-});
-
-class DestinationDirectoryNotifier extends StateNotifier<String?> {
-  // Update type to EncryptedSharedPreferencesAsync
-  final EncryptedSharedPreferencesAsync _prefs;
-
-  // Provide default null state synchronously
-  DestinationDirectoryNotifier(this._prefs) : super(null);
-
-  // Load initial directory asynchronously
-  Future<void> loadInitialDirectory() async {
-    // Await getString (no default needed, null is acceptable)
-    final initialDir = await _prefs.getString(prefDestinationDir);
-    if (state != initialDir) {
-      state = initialDir;
+      await _prefs.setString(_prefDeviceAlias, newAlias);
+      state = state.copyWith(alias: newAlias);
     }
   }
 
-  Future<void> setDestinationDirectory(String newDir) async {
-    // Use await with EncryptedSharedPreferencesAsync
-    await _prefs.setString(prefDestinationDir, newDir);
-    state = newDir;
-  }
-}
-
-// Update provider to watch the correct provider and load initial state
-final biometricAuthProvider = StateNotifierProvider<BiometricAuthNotifier, bool>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return BiometricAuthNotifier(prefs)..loadInitialAuthState();
-});
-
-class BiometricAuthNotifier extends StateNotifier<bool> {
-  // Update type to EncryptedSharedPreferencesAsync
-  final EncryptedSharedPreferencesAsync _prefs;
-
-  // Provide default false state synchronously
-  BiometricAuthNotifier(this._prefs) : super(false);
-
-  // Load initial auth state asynchronously
-  Future<void> loadInitialAuthState() async {
-    // Await getBool and provide default
-    final initialValue = await _prefs.getBool(prefUseBiometricAuth, defaultValue: false);
-    if (state != initialValue) {
-      state = initialValue!; // Use null assertion as default is provided
+  Future<void> setDestinationDirectory(String? newDir) async {
+    if (newDir == null) {
+      await _prefs.remove(_prefDestinationDir);
+      state = state.copyWith(clearDestinationDir: true);
+    } else {
+      await _prefs.setString(_prefDestinationDir, newDir);
+      state = state.copyWith(destinationDir: newDir);
     }
   }
 
   Future<void> setBiometricAuth(bool enabled) async {
-    // Use await with EncryptedSharedPreferencesAsync
-    await _prefs.setBool(prefUseBiometricAuth, enabled);
-    state = enabled;
+    await _prefs.setBool(_prefUseBiometricAuth, enabled);
+    state = state.copyWith(useBiometricAuth: enabled);
   }
+
+  Future<void> addFavoriteDevice(Map<String, String> deviceData) async {
+    // Avoid duplicates based on IP (or a combination if needed)
+    if (state.favoriteDevices.any((fav) => fav['ip'] == deviceData['ip'])) {
+      print("Device already in favorites.");
+      return; // Or update existing? For now, just skip duplicates.
+    }
+
+    final updatedFavorites = List<Map<String, String>>.from(state.favoriteDevices)..add(deviceData);
+    await _prefs.setString(_prefFavoriteDevices, jsonEncode(updatedFavorites));
+    state = state.copyWith(favoriteDevices: updatedFavorites);
+  }
+
+  Future<void> removeFavoriteDevice(Map<String, String> deviceData) async {
+     // Ensure deviceData has an 'ip' key before proceeding
+     if (!deviceData.containsKey('ip')) {
+       print("Error: Attempted to remove favorite without an IP address.");
+       return;
+     }
+     final updatedFavorites = List<Map<String, String>>.from(state.favoriteDevices)
+       ..removeWhere((fav) => fav['ip'] == deviceData['ip']); // Match only IP for removal
+     await _prefs.setString(_prefFavoriteDevices, jsonEncode(updatedFavorites));
+     state = state.copyWith(favoriteDevices: updatedFavorites);
+     print("Notifier state updated. New favorites list: ${state.favoriteDevices}"); // <-- Add log
+   }
 }
+
+// Use this provider to ensure settings are loaded before accessing them
+final settingsFutureProvider = FutureProvider<SettingsState>((ref) async {
+  // Assuming sharedPreferencesProvider is Provider<EncryptedSharedPreferencesAsync>
+  // If it's FutureProvider<EncryptedSharedPreferencesAsync>, use .future
+  final prefs = ref.watch(sharedPreferencesProvider);
+  // If sharedPreferencesProvider IS a FutureProvider, uncomment the line below and comment the line above
+  // final prefs = await ref.watch(sharedPreferencesProvider.future);
+  final initialState = await SettingsNotifier.loadInitialState(prefs);
+  return initialState;
+});
+
+// The main provider for settings state, depends on the future provider being loaded
+final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>((ref) {
+  // Watch the future provider. When it completes, its data is used.
+  final asyncState = ref.watch(settingsFutureProvider);
+
+  // Provide a temporary/loading state until the future completes
+  // This requires SettingsNotifier to handle an initial dummy state or for loadInitialState to be synchronous (which it isn't)
+  // A common pattern is to make the UI handle the loading state from settingsFutureProvider
+  // For the notifier itself, we need the prefs instance.
+  final prefs = ref.watch(sharedPreferencesProvider); // Get prefs synchronously
+
+  // Return the notifier, initialized with a default state.
+  // The actual loaded state will be available via settingsFutureProvider or by watching settingsProvider itself AFTER the future completes.
+  // The initial state here might be slightly out of sync until the future loads, but allows access to methods.
+  // Use the synchronous fallback for the initial state here.
+  return SettingsNotifier(prefs, SettingsState(
+      alias: SettingsNotifier._generateDefaultAliasSyncFallback(), // Use sync fallback for initial state
+      useBiometricAuth: false,
+      favoriteDevices: [],
+      destinationDir: null,
+  ));
+});
+
+// --- Convenience Providers for individual settings (Optional but helpful) ---
+
+// Provider for just the device alias
+final deviceAliasProvider = Provider<String>((ref) {
+  // Watch the main StateNotifierProvider to get live updates
+  final settingsState = ref.watch(settingsProvider);
+  return settingsState.alias;
+  // Note: Initial loading state might need handling in the UI
+  // if accessed before settingsFutureProvider completes.
+});
+
+// Provider for just the destination directory
+final destinationDirectoryProvider = Provider<String?>((ref) {
+  // Watch the main StateNotifierProvider to get live updates
+  final settingsState = ref.watch(settingsProvider);
+  return settingsState.destinationDir;
+});
+
+// Provider for just the biometric auth setting
+final biometricAuthProvider = Provider<bool>((ref) {
+  // Watch the main StateNotifierProvider to get live updates
+  final settingsState = ref.watch(settingsProvider);
+  return settingsState.useBiometricAuth;
+});
+
+// Provider for the list of favorite devices
+final favoriteDevicesProvider = Provider<List<Map<String, String>>>((ref) {
+  // Watch the StateNotifierProvider directly to get live updates
+  final settingsState = ref.watch(settingsProvider);
+  return settingsState.favoriteDevices;
+});

@@ -70,7 +70,8 @@ class SettingsPage extends ConsumerWidget {
               onPressed: () async {
                 final newAlias = controller.text.trim();
                 if (newAlias.isNotEmpty) {
-                  await ref.read(deviceAliasProvider.notifier).setAlias(newAlias);
+                  // Use the main settingsProvider notifier
+                  await ref.read(settingsProvider.notifier).setAlias(newAlias);
                   if (context.mounted) {
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alias updated successfully!')));
@@ -90,7 +91,8 @@ class SettingsPage extends ConsumerWidget {
     try {
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select Destination Directory');
       if (selectedDirectory != null) {
-        await ref.read(destinationDirectoryProvider.notifier).setDestinationDirectory(selectedDirectory);
+        // Use the main settingsProvider notifier
+        await ref.read(settingsProvider.notifier).setDestinationDirectory(selectedDirectory);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Destination directory set to: $selectedDirectory')));
         }
@@ -125,15 +127,18 @@ class SettingsPage extends ConsumerWidget {
               _showEditAliasDialog(context, ref, currentAlias);
             },
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.folder_open_outlined),
-            title: const Text('Destination Directory'),
+          // Conditionally hide Destination Directory on web
+          if (!kIsWeb) ...[
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.folder_open_outlined),
+              title: const Text('Destination Directory'),
             subtitle: Text(currentDestinationDir ?? 'Not set (Defaults to Downloads)'),
             onTap: () {
               _pickDestinationDirectory(context, ref);
             },
-          ),
+            ),
+          ], // End of conditional block for Destination Directory
           const Divider(),
           if (!kIsWeb)
             SwitchListTile(
@@ -142,7 +147,8 @@ class SettingsPage extends ConsumerWidget {
               subtitle: const Text('Require fingerprint/face ID to open the app'),
               value: useBiometricAuth,
               onChanged: (bool value) {
-                ref.read(biometricAuthProvider.notifier).setBiometricAuth(value);
+                 // Use the main settingsProvider notifier
+                ref.read(settingsProvider.notifier).setBiometricAuth(value);
               },
             ),
           const Divider(),
@@ -156,6 +162,47 @@ class SettingsPage extends ConsumerWidget {
             ),
           ),
           const Divider(),
+          // --- Add NFC Write Button ---
+          Consumer(
+            builder: (context, ref, child) {
+              // Watch NFC availability
+              final nfcAvailableAsync = ref.watch(nfcAvailabilityProvider);
+
+              return nfcAvailableAsync.when(
+                data: (isAvailable) {
+                  if (!isAvailable) {
+                    // Don't show button if NFC is not available
+                    return const SizedBox.shrink();
+                  }
+                  // Show the button if NFC is available
+                  return ListTile(
+                    leading: const Icon(Icons.nfc_rounded),
+                    title: const Text('Write Device Info to NFC Tag'),
+                    subtitle: const Text('Tap to write IP and device name to an NFC tag.'),
+                    onTap: () async {
+                      // Call the writeNdef method from the service
+                      await ref.read(nfcServiceProvider).writeNdef(context);
+                    },
+                  );
+                },
+                // Show a placeholder or nothing while loading
+                loading: () => const ListTile(
+                  leading: Icon(Icons.nfc_rounded),
+                  title: Text('Checking NFC...'),
+                  enabled: false,
+                ),
+                // Show an error message or nothing on error
+                error: (error, stack) => ListTile(
+                  leading: const Icon(Icons.error_outline, color: Colors.red),
+                  title: const Text('NFC Error'),
+                  subtitle: Text('$error'),
+                  enabled: false,
+                ),
+              );
+            },
+          ),
+          const Divider(),
+          // --- End NFC Write Button ---
         ],
       ),
     );
