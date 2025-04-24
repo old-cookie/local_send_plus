@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:logging/logging.dart';
 
 // StatefulWidget that represents the QR scanner screen
 class QrScannerPage extends StatefulWidget {
@@ -23,6 +24,7 @@ class _QrScannerPageState extends State<QrScannerPage> with WidgetsBindingObserv
   bool _isProcessing = false;
 
   // Initialize the state and start listening for QR codes
+  @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
@@ -66,7 +68,7 @@ class _QrScannerPageState extends State<QrScannerPage> with WidgetsBindingObserv
         setState(() {
           _isProcessing = true;
         });
-        print('QR Code Detected: $scannedValue');
+        Logger('QrScannerPage').info('QR Code Detected: $scannedValue');
         // Stop scanning and return the detected value
         unawaited(controller.stop());
         Navigator.of(context).pop(scannedValue);

@@ -114,7 +114,7 @@ class _CropPageState extends State<CropPage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.orange.withOpacity(0.8) : Colors.black.withOpacity(0.5),
+                color: isSelected ? Colors.orange.withAlpha(204) : Colors.black.withAlpha(128),
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: isSelected ? Colors.orange : Colors.grey[700]!, width: 1.5),
               ),

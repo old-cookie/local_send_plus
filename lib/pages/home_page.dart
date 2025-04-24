@@ -34,50 +34,31 @@ import 'package:local_send_plus/providers/settings_provider.dart';
 import 'package:local_send_plus/features/server/server_provider.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:local_send_plus/pages/qr_scanner_page.dart';
-import 'package:logging/logging.dart';
+import 'package:logging/logging.dart'; // Import the logging package
 
-final _logger = Logger('HomePage');
-
-/// HomePage is the main screen of the LocalSend Plus application.
-/// It provides functionality for:
-/// - Discovering and displaying nearby devices
-/// - Sending files and text messages to other devices
-/// - Managing favorite devices
-/// - NFC communication capabilities
-/// - QR code scanning and generation
-/// - File editing capabilities (image and video)
-///
-/// The page maintains state for:
-/// - Currently selected file or text for sending
-/// - Discovery and server services
-/// - Connection status and local IP address
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-/// The state class for HomePage that manages the UI and business logic
-/// for the local file sharing functionality.
 class _HomePageState extends ConsumerState<HomePage> {
-  // File selection state
-  String? _selectedFilePath; // Path to selected file (native platforms)
-  String? _selectedFileName; // Name of the selected file
-  Uint8List? _selectedFileBytes; // File data (web platform or edited files)
-  bool _isSending = false; // Tracks if a file transfer is in progress
-
-  // Text input controllers
-  final TextEditingController _ipController = TextEditingController(); // For manual IP entry
-  final TextEditingController _nameController = TextEditingController(); // For device name entry
-  final TextEditingController _textController = TextEditingController(); // For text message input
-
-  // Service subscriptions and instances
-  StreamSubscription? _receivedFileSubscription; // Listens for incoming files
-  StreamSubscription? _receivedTextSubscription; // Listens for incoming text messages
-  DiscoveryService? _discoveryService; // Handles device discovery
-  ServerService? _serverService; // Manages the local server
-  String? _localIpAddress; // Stores the device's IP address
-  String? _scanResult; // Stores QR scan results
+  final _log = Logger('HomePage'); // Create a logger instance
+  String? _selectedFilePath;
+  String? _selectedFileName;
+  Uint8List? _selectedFileBytes;
+  bool _isSending = false;
+  final TextEditingController _ipController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _textController = TextEditingController();
+  // Remove local _favorites list - use provider directly
+  // static const String _favoritesPrefKey = 'favorite_devices';
+  StreamSubscription? _receivedFileSubscription;
+  StreamSubscription? _receivedTextSubscription;
+  DiscoveryService? _discoveryService;
+  ServerService? _serverService;
+  String? _localIpAddress;
+  String? _scanResult;
 
   @override
   void initState() {
@@ -96,12 +77,12 @@ class _HomePageState extends ConsumerState<HomePage> {
       _receivedFileSubscription = localRef.read(receivedFileProvider.notifier).stream.listen((ReceivedFileInfo? fileInfo) {
         if (fileInfo != null) {
           if (!mounted) return;
-          final BuildContext currentContext = context;
-          if (!(ModalRoute.of(currentContext)?.isCurrent ?? false)) return;
+          // Removed context capture and route check before microtask
           Future.microtask(() {
-            if (!mounted || !(ModalRoute.of(currentContext)?.isCurrent ?? false)) return;
+            // Check mounted *inside* microtask before using context
+            if (!mounted) return;
             showDialog(
-              context: currentContext,
+              context: context, // Use context directly after mounted check
               barrierDismissible: false,
               builder: (BuildContext dialogContext) {
                 return ReceivedFileDialog(fileInfo: fileInfo);
@@ -117,12 +98,12 @@ class _HomePageState extends ConsumerState<HomePage> {
       _receivedTextSubscription = localRef.read(receivedTextProvider.notifier).stream.listen((String? text) {
         if (text != null) {
           if (!mounted) return;
-          final BuildContext currentContext = context;
-          if (!(ModalRoute.of(currentContext)?.isCurrent ?? false)) return;
+          // Removed context capture and route check before microtask
           Future.microtask(() {
-            if (!mounted || !(ModalRoute.of(currentContext)?.isCurrent ?? false)) return;
+            // Check mounted *inside* microtask before using context
+            if (!mounted) return;
             showDialog(
-              context: currentContext,
+              context: context, // Use context directly after mounted check
               barrierDismissible: false,
               builder: (BuildContext dialogContext) {
                 return ReceivedTextDialog(receivedText: text);
@@ -160,7 +141,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         });
       }
     } catch (e) {
-      _logger.warning("Failed to get local IP", e);
+      _log.warning("Failed to get local IP", e); // Use logger
       if (mounted) {
         // Optionally show a snackbar or log error to UI if needed
         // ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not get IP address: $e')));
@@ -170,16 +151,18 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   // --- Add NFC Dialog Method ---
   Future<void> _showNfcDialog(BuildContext context, WidgetRef ref) async {
+    // Store BuildContext before any async operations
+    final dialogContext = context;
     showDialog(
-      context: context,
+      context: dialogContext,
       builder: (BuildContext dialogContext) {
         return SimpleDialog(
           title: const Text('NFC Actions'),
           children: <Widget>[
             SimpleDialogOption(
               onPressed: () async {
-                Navigator.pop(dialogContext); // Close the dialog first
-                // Call the write method from the service
+                Navigator.pop(dialogContext);
+                if (!mounted) return;
                 await ref.read(nfcServiceProvider).writeNdef(context);
               },
               child: const ListTile(
@@ -189,20 +172,28 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             SimpleDialogOption(
               onPressed: () async {
-                Navigator.pop(dialogContext); // Close the dialog first
+                Navigator.pop(dialogContext);
+                if (!mounted) return;
+                // Store context before async gap
+                final currentContext = context;
                 // Call the read method, passing the callback to add to favorites
-                await ref.read(nfcServiceProvider).readNdef(context, (data) {
-                  _logger.info("NFC Read Callback: Received data: $data");
+                await ref.read(nfcServiceProvider).readNdef(currentContext, (data) {
+                  // This callback might run after the widget is disposed
+                  if (!mounted) {
+                    _log.warning("NFC Read Callback: Widget unmounted before processing data: $data");
+                    return;
+                  }
+                  _log.info("NFC Read Callback: Received data: $data"); // Use logger
                   // Use the main settingsProvider notifier to add the favorite
+                  final scaffoldMessenger = ScaffoldMessenger.of(currentContext); // Use stored context
                   try {
                     ref.read(settingsProvider.notifier).addFavoriteDevice(data);
-                    _logger.info("NFC Read Callback: Called addFavoriteDevice successfully.");
+                    _log.info("NFC Read Callback: Called addFavoriteDevice successfully."); // Use logger
                     // Optionally show a confirmation SnackBar here if NfcService doesn't
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text('Added ${data['name']} (${data['ip']}) to favorites via NFC.')));
+                    scaffoldMessenger.showSnackBar(SnackBar(content: Text('Added ${data['name']} (${data['ip']}) to favorites via NFC.')));
                   } catch (e) {
-                    _logger.warning("NFC Read Callback: Error calling addFavoriteDevice: $e");
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error adding favorite via NFC: $e')));
+                    _log.severe("NFC Read Callback: Error calling addFavoriteDevice", e); // Use logger
+                    scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error adding favorite via NFC: $e')));
                   }
                 });
               },
@@ -214,7 +205,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             SimpleDialogOption(
               onPressed: () {
-                Navigator.pop(dialogContext); // Just close the dialog
+                Navigator.pop(dialogContext);
               },
               child: const Text('Cancel', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
             ),
@@ -246,24 +237,25 @@ class _HomePageState extends ConsumerState<HomePage> {
     final deviceData = {'ip': ip, 'name': name}; // Assuming port is fixed or handled elsewhere
     // Rely on the check within addFavoriteDevice in the provider
 
-    _logger.info("Attempting to add favorite: $deviceData");
+    _log.info("Attempting to add favorite: $deviceData"); // Use logger
+    final scaffoldMessenger = ScaffoldMessenger.of(context); // Store before async gap
+    final focusScope = FocusScope.of(context); // Store before async gap
     try {
       await ref.read(settingsProvider.notifier).addFavoriteDevice(deviceData);
-      _logger.info("Successfully called addFavoriteDevice for: $deviceData");
+      _log.info("Successfully called addFavoriteDevice for: $deviceData"); // Use logger
+      if (!mounted) return false; // Check after await
+      // Clear fields and unfocus after successful add
+      _ipController.clear();
+      _nameController.clear();
+      focusScope.unfocus(); // Use stored scope
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Added $name to favorites.'))); // Use stored messenger
+      return true; // Indicate success
     } catch (e) {
-      _logger.severe("Error calling addFavoriteDevice: $e");
-      if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error adding favorite: $e')));
+      _log.severe("Error calling addFavoriteDevice", e); // Use logger
+      if (!mounted) return false; // Check after await (though technically before context use here)
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error adding favorite: $e'))); // Use stored messenger
       return false;
     }
-
-    if (!mounted) return false;
-    // Clear fields and unfocus after successful add
-    _ipController.clear();
-    _nameController.clear();
-    FocusScope.of(context).unfocus();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added $name to favorites.')));
-    return true; // Indicate success
   }
 
   Future<void> _initiateSend(DeviceInfo targetDevice) async {
@@ -272,15 +264,15 @@ class _HomePageState extends ConsumerState<HomePage> {
       _isSending = true;
     });
     String? errorMessage;
+    final scaffoldMessenger = ScaffoldMessenger.of(context); // Store before async gap
     try {
       if (_selectedFileName != null && (_selectedFilePath != null || _selectedFileBytes != null)) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sending file $_selectedFileName to ${targetDevice.alias}...')));
-        if (!mounted) return;
+        // No await before this context use
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Sending file $_selectedFileName to ${targetDevice.alias}...')));
         await ref.read(sendServiceProvider).sendFile(targetDevice, _selectedFileName!, filePath: _selectedFilePath, fileBytes: _selectedFileBytes);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sent $_selectedFileName successfully!')));
-        if (!mounted) return;
+        if (!mounted) return; // Check after await
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Sent $_selectedFileName successfully!')));
+        // setState is safe if mounted check is done before
         setState(() {
           _selectedFilePath = null;
           _selectedFileName = null;
@@ -289,8 +281,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       } else {
         final textToSend = _textController.text.trim();
         if (textToSend.isNotEmpty) {
-          if (!mounted) return;
-          final scaffoldMessenger = ScaffoldMessenger.of(context);
+          // No await before this context use
           scaffoldMessenger.hideCurrentSnackBar();
           scaffoldMessenger.showSnackBar(
             SnackBar(
@@ -309,18 +300,18 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           );
           try {
-            if (!mounted) return;
             await ref.read(sendServiceProvider).sendText(targetDevice, textToSend);
-            if (!mounted) return;
+            if (!mounted) return; // Check after await
             scaffoldMessenger.hideCurrentSnackBar();
             scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Text sent successfully!'), backgroundColor: Colors.green));
-            _textController.clear();
+            _textController.clear(); // Safe if mounted check passed
           } catch (e) {
-            errorMessage = e.toString();
+            errorMessage = e.toString(); // Store error message
           }
         } else {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter text or select a file to send.')));
+          // No await before this context use
+          scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Please enter text or select a file to send.')));
+          // setState is safe here as no await preceded it in this block
           setState(() {
             _isSending = false;
           });
@@ -328,21 +319,27 @@ class _HomePageState extends ConsumerState<HomePage> {
         }
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage ?? 'Error sending: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
-          action: SnackBarAction(label: 'Retry', textColor: Colors.white, onPressed: () => _initiateSend(targetDevice)),
-        ),
-      );
+      errorMessage ??= e.toString(); // Ensure errorMessage is set if it wasn't from inner catch
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isSending = false;
-      });
+      // Check mounted *inside* finally before using context or setState, but DO NOT return.
+      if (mounted) {
+        if (errorMessage != null) {
+          // Use the stored scaffoldMessenger
+          scaffoldMessenger.hideCurrentSnackBar();
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: Text('Error sending: $errorMessage'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(label: 'Retry', textColor: Colors.white, onPressed: () => _initiateSend(targetDevice)),
+            ),
+          );
+        }
+        setState(() {
+          _isSending = false;
+        });
+      }
+      // If not mounted, the finally block completes without doing unsafe operations.
     }
   }
 
@@ -379,7 +376,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             } else if (snapshot.hasError) {
-              _logger.warning('Error generating video thumbnail: ${snapshot.error}');
+              _log.warning('Error generating video thumbnail', snapshot.error); // Use logger
               return const Icon(Icons.video_file_outlined, size: 50);
             } else if (snapshot.hasData && snapshot.data != null) {
               return Image.memory(snapshot.data!, fit: BoxFit.cover);
@@ -407,8 +404,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             height: 100,
             width: double.infinity,
             decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4.0)),
-            child: ClipRRect(borderRadius: BorderRadius.circular(4.0), child: thumbnailWidget),
             alignment: Alignment.center,
+            child: ClipRRect(borderRadius: BorderRadius.circular(4.0), child: thumbnailWidget),
           ),
         ],
       ),
@@ -677,7 +674,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           builder: (context, ref, child) {
             // Read the current favorites list from the provider
             final favoritesList = ref.watch(favoriteDevicesProvider);
-            _logger.info("Favorites Dialog Consumer rebuilt. Received list: $favoritesList");
+            _log.fine("Favorites Dialog Consumer rebuilt. Received list: $favoritesList"); // Use logger (fine level for rebuilds)
             // Convert List<Map<String, String>> to List<DeviceInfo> for compatibility
             // Assuming a fixed port or handle differently if port varies
             final favorites = favoritesList.map((fav) => DeviceInfo(ip: fav['ip']!, port: 2706, alias: fav['name']!)).toList();
@@ -733,19 +730,19 @@ class _HomePageState extends ConsumerState<HomePage> {
                                     icon: const Icon(Icons.delete_outline, color: Colors.red),
                                     tooltip: 'Remove Favorite',
                                     onPressed: () async {
-                                      _logger.info("Attempting to remove favorite with data: $deviceData");
-                                      final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                      _log.info("Attempting to remove favorite with data: $deviceData"); // Use logger
+                                      final scaffoldMessenger = ScaffoldMessenger.of(context); // Store before async gap
                                       final removedDeviceAlias = device.alias;
-                                      if (!mounted) return;
+                                      // No need for mounted check here before await
                                       try {
                                         // Call the provider's remove method
                                         await ref.read(settingsProvider.notifier).removeFavoriteDevice(deviceData);
-                                        _logger.info("Successfully called removeFavoriteDevice for: $deviceData");
-                                        if (!mounted) return;
+                                        _log.info("Successfully called removeFavoriteDevice for: $deviceData"); // Use logger
+                                        if (!mounted) return; // Check after await
                                         scaffoldMessenger.showSnackBar(SnackBar(content: Text('Removed $removedDeviceAlias from favorites.')));
                                       } catch (e) {
-                                        _logger.severe("Error calling removeFavoriteDevice: $e");
-                                        if (!mounted) return;
+                                        _log.severe("Error calling removeFavoriteDevice", e); // Use logger
+                                        if (!mounted) return; // Check after await (though technically before context use here)
                                         scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error removing favorite: $e')));
                                       }
                                       // No need for setDialogState
@@ -825,13 +822,19 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
     }
 
-    if (!mounted) return;
+    if (!mounted) return; // Check mounted *after* async permission requests
+
+    // Removed ScaffoldMessenger capture here.
+
     if (!permissionGranted) {
+      // Use context directly here, guarded by the 'mounted' check above.
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${permissionTypeDenied ?? 'Required'} permission denied')));
       return;
     }
+
+    // ScaffoldMessenger will be captured inside the catch block if needed, after its own mounted check.
     try {
-      if (!mounted) return;
+      // No context use before await here
       setState(() {
         _selectedFilePath = null;
         _selectedFileName = null;
@@ -842,10 +845,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (!mounted) return;
       if (result != null && result.files.isNotEmpty) {
         PlatformFile file = result.files.single;
-        _logger.info('FilePicker result on ${kIsWeb ? "Web" : "Native"}:');
-        _logger.info('  Name: ${file.name}');
-        _logger.info('  Path: ${kIsWeb ? "N/A (Web)" : file.path}');
-        _logger.info('  Bytes length: ${file.bytes?.length}');
+        _log.info(
+            'FilePicker result on ${kIsWeb ? "Web" : "Native"}: Name: ${file.name}, Path: ${kIsWeb ? "N/A (Web)" : file.path}, Bytes: ${file.bytes?.length}'); // Use logger
         final String fileName = file.name;
         final Uint8List? fileBytes = file.bytes;
         final String? filePath = kIsWeb ? null : file.path;
@@ -914,60 +915,66 @@ class _HomePageState extends ConsumerState<HomePage> {
         } else if (!kIsWeb && filePath != null) {
           _setPickedFile(bytes: null, path: filePath, name: fileName);
         } else if (kIsWeb && filePath != null) {
-          _logger.warning('File picking error on Web: Only path is available, but bytes are required.');
+          _log.warning('File picking error on Web: Only path is available, but bytes are required.'); // Use logger
+          final scaffoldMessenger = ScaffoldMessenger.of(context); // Store before async gap
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to access selected file data.')));
+          scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Failed to access selected file data.')));
         } else {
-          _logger.warning('File picking failed: No bytes or path available.');
+          _log.warning('File picking failed: No bytes or path available.'); // Use logger
+          final scaffoldMessenger = ScaffoldMessenger.of(context); // Store before async gap
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to access selected file.')));
+          scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Failed to access selected file.')));
         }
       } else {
-        _logger.info('File picking cancelled.');
+        _log.info('File picking cancelled.'); // Use logger
       }
     } catch (e) {
-      _logger.severe('Error picking file', e);
+      _log.severe('Error picking file', e); // Use logger
+      // Check mounted *after* the async gap and *before* using context.
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error picking file: $e')));
+      // Capture ScaffoldMessenger *after* the await and mounted check.
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error picking file: $e')));
     }
   }
 
   Future<void> _navigateToEditor({Uint8List? bytes, String? path, required String fileName}) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context); // Store before async gap
     Uint8List? imageBytes = bytes;
     if (kIsWeb && imageBytes == null) {
-      _logger.warning('Error: Cannot edit image on web without image bytes.');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot edit photo: Image data not available.')));
+      _log.warning('Error: Cannot edit image on web without image bytes.'); // Use logger
+      // No await before this context use
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Cannot edit photo: Image data not available.')));
       return;
     }
     if (!kIsWeb && imageBytes == null && path != null) {
       try {
-        if (!mounted) return;
+        // No context use before await
         imageBytes = await File(path).readAsBytes();
       } catch (e) {
-        _logger.severe('Error reading image file from path: $e', e);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error reading image file: $e')));
+        _log.severe('Error reading image file from path', e); // Use logger
+        if (!mounted) return; // Check after await
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error reading image file: $e')));
         return;
       }
     }
-    if (!mounted) return;
+    // No await before this context use
     if (imageBytes == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot edit photo: No image data available.')));
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Cannot edit photo: No image data available.')));
       return;
     }
-    if (!mounted) return;
+    // No await before this context use
     final Uint8List? editedImageBytes = await Navigator.push<Uint8List>(
       context,
       MaterialPageRoute(builder: (context) => ImageEditor(image: imageBytes!)),
     );
     if (!mounted) return;
     if (editedImageBytes != null) {
-      _logger.info('Image editing complete. Got ${editedImageBytes.length} bytes.');
+      _log.info('Image editing complete. Got ${editedImageBytes.length} bytes.'); // Use logger
       final editedFileName = 'edited_$fileName';
       _setPickedFile(bytes: editedImageBytes, path: null, name: editedFileName);
     } else {
-      _logger.info('Image editing cancelled.');
+      _log.info('Image editing cancelled.'); // Use logger
       setState(() {
         _selectedFilePath = null;
         _selectedFileName = null;
@@ -977,106 +984,121 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _navigateToVideoEditor({Uint8List? bytes, String? path, required String fileName}) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context); // Store before async gap
     if (kIsWeb) {
-      _logger.warning('Video editing is not supported on the web.');
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video editing is not supported on the web.')));
+      _log.warning('Video editing is not supported on the web.'); // Use logger
+      // No await before this context use
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Video editing is not supported on the web.')));
       return;
     }
 
     String? videoPath = path;
     File? tempFile;
+    // setState is safe here
     setState(() {
       _isSending = true;
     });
     if (videoPath == null && bytes != null) {
       try {
-        if (!mounted) return;
+        // No context use before await
         final tempDir = await getTemporaryDirectory();
         final String tempFileName = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
         tempFile = File('${tempDir.path}/$tempFileName');
         await tempFile.writeAsBytes(bytes);
         videoPath = tempFile.path;
-        _logger.info('Saved video bytes to temporary file: $videoPath');
+        _log.info('Saved video bytes to temporary file: $videoPath'); // Use logger
       } catch (e) {
-        _logger.severe('Error saving video bytes to temporary file', e);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error preparing video for editing: $e')));
+        _log.severe('Error saving video bytes to temporary file', e); // Use logger
+        if (!mounted) return; // Check after await
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error preparing video for editing: $e')));
+        // Ensure _isSending is reset on error before returning
+        setState(() {
+          _isSending = false;
+        });
         return;
       }
     }
-    if (!mounted) return;
+    // No await before this context use
     if (videoPath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot edit video: No video file path available.')));
-      return;
-    }
-    if (!mounted) return;
-    final File videoFile = File(videoPath);
-    if (!mounted) {
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Cannot edit video: No video file path available.')));
       setState(() {
         _isSending = false;
-      });
+      }); // Reset sending state
       return;
     }
+
+    final File videoFile = File(videoPath);
+    // No await before this context use
+    // The Navigator.push itself uses context, but the await is for its result.
+    // The context passed to Navigator.push is captured before the await.
     final ExportConfig? exportConfig = await Navigator.push<ExportConfig?>(
       context,
       MaterialPageRoute(builder: (context) => VideoEditorScreen(file: videoFile)),
     );
+
+    // Handle temp file deletion after navigation completes
     if (tempFile != null) {
       try {
         await tempFile.delete();
-        _logger.info('Deleted temporary video file: ${tempFile.path}');
+        _log.info('Deleted temporary video file: ${tempFile.path}'); // Use logger
       } catch (e) {
-        _logger.warning('Error deleting temporary video file', e);
+        _log.warning('Error deleting temporary video file', e); // Use logger
+        // Decide if this error needs user notification
       }
     }
-    if (!mounted) {
-      setState(() {
-        _isSending = false;
-      });
-      return;
-    }
-    if (exportConfig != null) {
-      _logger.info('Video editing confirmed. Preparing FFmpeg execution...');
-      _logger.info('Command: ${exportConfig.command}');
-      _logger.info('Output Path: ${exportConfig.outputPath}');
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Processing video... This may take a moment.')));
 
+    if (!mounted) return; // Check after Navigator.push and tempFile.delete
+
+    if (exportConfig != null) {
+      _log.info('Video editing confirmed. Preparing FFmpeg execution...'); // Use logger
+      _log.info('Command: ${exportConfig.command}'); // Use logger
+      _log.info('Output Path: ${exportConfig.outputPath}'); // Use logger
+      // setState is safe here
+      setState(() {}); // Potentially update UI to show processing state more explicitly if needed
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Processing video... This may take a moment.')));
       await FFmpegKit.executeAsync(
         exportConfig.command,
         (FFmpegSession session) async {
+          // This callback runs after FFmpeg finishes
           final state = await session.getState();
           final returnCode = await session.getReturnCode();
           final failStackTrace = await session.getFailStackTrace();
-          if (!mounted) return;
+
+          if (!mounted) return; // Check inside the async callback
+
           setState(() {
+            // Update state inside the callback
             _isSending = false;
           });
+
           if (ReturnCode.isSuccess(returnCode)) {
-            _logger.info('FFmpeg process completed successfully.');
+            _log.info('FFmpeg process completed successfully.'); // Use logger
             final editedVideoPath = exportConfig.outputPath;
             final editedFileName = editedVideoPath.split(Platform.pathSeparator).last;
-            _setPickedFile(bytes: null, path: editedVideoPath, name: editedFileName);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video processed successfully! Ready to send.')));
+            _setPickedFile(bytes: null, path: editedVideoPath, name: editedFileName); // Uses context via _setPickedFile -> ScaffoldMessenger
+            // _setPickedFile already checks mounted
           } else {
-            _logger.severe('FFmpeg process failed with state $state and rc $returnCode.');
+            _log.severe('FFmpeg process failed with state $state and rc $returnCode.'); // Use logger
             if (failStackTrace != null) {
-              _logger.severe('FFmpeg failure stack trace: $failStackTrace');
+              _log.severe('FFmpeg failure stack trace: $failStackTrace'); // Use logger
             }
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error processing video. Code: $returnCode')));
+            scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error processing video. Code: $returnCode')));
             setState(() {
+              // Update state inside the callback
               _selectedFilePath = null;
               _selectedFileName = null;
               _selectedFileBytes = null;
             });
           }
         },
-        (Log log) {},
-        (Statistics statistics) {},
+        (Log log) {}, // Log callback
+        (Statistics statistics) {}, // Statistics callback
       );
     } else {
-      _logger.info('Video editing cancelled.');
+      // This block runs if Navigator.push returned null (editing cancelled)
+      _log.info('Video editing cancelled.'); // Use logger
       setState(() {
+        // Update state after Navigator.push returned
         _selectedFilePath = null;
         _selectedFileName = null;
         _selectedFileBytes = null;
@@ -1092,27 +1114,32 @@ class _HomePageState extends ConsumerState<HomePage> {
       _selectedFilePath = path;
       _selectedFileName = name;
     });
-    _logger.info('Selected file: $name ${bytes != null ? "(from bytes)" : "(from path)"}');
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Selected: $name. Tap a device to send.')));
+    _log.info('Selected file: $name ${bytes != null ? "(from bytes)" : "(from path)"}'); // Use logger
+    final scaffoldMessenger = ScaffoldMessenger.of(context); // Store before potential async gap in caller
+    if (!mounted) return; // Check before using context
+    scaffoldMessenger.showSnackBar(SnackBar(content: Text('Selected: $name. Tap a device to send.')));
   }
 
   Future<void> _scanQrCode() async {
+    if (!mounted) return;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('QR Code scanning via camera is not supported on web.')));
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('QR Code scanning via camera is not supported on web.')));
       return;
     }
     try {
-      final String? scanResult = await Navigator.push<String>(context, MaterialPageRoute(builder: (context) => const QrScannerPage()));
       if (!mounted) return;
+      final currentContext = context;
+      final String? scanResult = await Navigator.push<String>(currentContext, MaterialPageRoute(builder: (context) => const QrScannerPage()));
+      if (!mounted) return; // Check after await
       if (scanResult == null) {
-        _logger.info('QR Code scan cancelled or failed.');
+        _log.info('QR Code scan cancelled or failed.'); // Use logger
         return;
       }
       setState(() {
         _scanResult = scanResult;
       });
-      _logger.info('QR Code Scanned: $_scanResult');
+      _log.info('QR Code Scanned: $_scanResult'); // Use logger
       try {
         final Map<String, dynamic> data = jsonDecode(_scanResult!);
         final String? ip = data['ip'] as String?;
@@ -1132,13 +1159,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                 TextButton(
                   child: const Text('Add Favorite'),
                   onPressed: () async {
-                    // Make async
-                    Navigator.of(context).pop();
+                    // Store context before async operations
+                    final dialogContext = context;
+                    final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
+                    Navigator.of(dialogContext).pop();
                     // Use provider to add favorite
                     await ref.read(settingsProvider.notifier).addFavoriteDevice(deviceData);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${scannedDevice.alias} to favorites.')));
-                    }
+                    if (!mounted) return; // Check after await
+                    scaffoldMessenger.showSnackBar(SnackBar(content: Text('Added ${scannedDevice.alias} to favorites.')));
                   },
                 ),
                 TextButton(
@@ -1156,14 +1184,14 @@ class _HomePageState extends ConsumerState<HomePage> {
           throw const FormatException('Invalid QR code data format (missing ip, port, or alias).');
         }
       } catch (e) {
-        _logger.warning('Error processing scanned QR code', e);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invalid QR data. Scanned: "$_scanResult"')));
+        _log.severe('Error processing scanned QR code', e); // Use logger
+        if (!mounted) return; // Check before context use
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Invalid QR data. Scanned: "$_scanResult"')));
       }
     } catch (e) {
-      _logger.severe('Error during QR scan or processing', e);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error scanning QR code: $e')));
+      _log.severe('Error during QR scan or processing', e); // Use logger
+      if (!mounted) return; // Check before context use
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error scanning QR code: $e')));
     }
   }
 }

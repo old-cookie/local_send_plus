@@ -12,9 +12,9 @@ import 'package:device_info_plus/device_info_plus.dart';
 /// This class provides functionality for reading and writing device information using NFC tags.
 class NfcService {
   final _logger = Logger('NfcService');
-  
+
   /// Checks if NFC is available on the current device.
-  /// 
+  ///
   /// Returns:
   ///   - true if NFC is available and can be used
   ///   - false if NFC is not supported or disabled
@@ -28,7 +28,7 @@ class NfcService {
   }
 
   /// Retrieves device information including IP address and device name.
-  /// 
+  ///
   /// Returns:
   ///   - Map containing 'ip' and 'name' if successful
   ///   - null if the information cannot be retrieved
@@ -52,12 +52,11 @@ class NfcService {
           deviceName = 'iOS Device'; // Placeholder
         } else {
           // Handle other platforms if necessary
-           deviceName = 'Unknown Device';
+          deviceName = 'Unknown Device';
         }
       } else {
-         deviceName = 'Web Browser';
+        deviceName = 'Web Browser';
       }
-
 
       if (ipAddress != null) {
         return {'ip': ipAddress, 'name': deviceName};
@@ -69,10 +68,10 @@ class NfcService {
   }
 
   /// Writes device information to an NFC tag.
-  /// 
+  ///
   /// Parameters:
   ///   - context: BuildContext for showing status messages
-  /// 
+  ///
   /// Shows progress and status via SnackBar messages.
   Future<void> writeNdef(BuildContext context) async {
     if (!await isNfcAvailable()) {
@@ -112,19 +111,17 @@ class NfcService {
         _showSnackBar(context, 'Error writing to tag: $e');
       }
     }, onError: (error) async {
-       _showSnackBar(context, 'NFC Error: ${error.message}');
+      _showSnackBar(context, 'NFC Error: ${error.message}');
     });
   }
 
   /// Reads device information from an NFC tag.
-  /// 
+  ///
   /// Parameters:
   ///   - context: BuildContext for showing status messages
   ///   - onDataReceived: Callback function to handle the received data
-  /// 
-  /// The callback receives a Map<String, String> containing the device information.
   Future<void> readNdef(BuildContext context, Function(Map<String, String> data) onDataReceived) async {
-     if (!await isNfcAvailable()) {
+    if (!await isNfcAvailable()) {
       _showSnackBar(context, 'NFC is not available on this device.');
       return;
     }
@@ -135,55 +132,55 @@ class NfcService {
       Ndef? ndef = Ndef.from(tag);
       if (ndef == null) {
         NfcManager.instance.stopSession(errorMessage: 'Tag is not NDEF compatible.');
-         _showSnackBar(context, 'Tag is not NDEF compatible.');
+        _showSnackBar(context, 'Tag is not NDEF compatible.');
         return;
       }
 
       NdefMessage? message = ndef.cachedMessage; // Read cached message if available
 
       if (message == null || message.records.isEmpty) {
-         try {
-           // If no cached message, try reading explicitly
-           message = await ndef.read();
-         } catch (e) {
-            NfcManager.instance.stopSession(errorMessage: 'Read failed: $e');
-            _showSnackBar(context, 'Error reading tag: $e');
-            return;
-         }
+        try {
+          // If no cached message, try reading explicitly
+          message = await ndef.read();
+        } catch (e) {
+          NfcManager.instance.stopSession(errorMessage: 'Read failed: $e');
+          _showSnackBar(context, 'Error reading tag: $e');
+          return;
+        }
       }
 
       if (message.records.isNotEmpty) {
         final record = message.records.first;
         // Assuming the first record is the text record we wrote
         if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown && record.type.length == 1 && record.type[0] == 0x54 /* T */) {
-           try {
-              // Decode the payload (skip language code byte)
-              final payloadString = utf8.decode(record.payload.sublist(record.payload[0] + 1));
-              final Map<String, dynamic> decodedData = jsonDecode(payloadString);
-              // Ensure keys are strings and values are strings
-              final Map<String, String> stringData = decodedData.map((key, value) => MapEntry(key, value.toString()));
-              onDataReceived(stringData);
-              NfcManager.instance.stopSession();
-              _showSnackBar(context, 'Device info received!');
-           } catch (e) {
-              NfcManager.instance.stopSession(errorMessage: 'Data parsing error: $e');
-              _showSnackBar(context, 'Error parsing data from tag: $e');
-           }
+          try {
+            // Decode the payload (skip language code byte)
+            final payloadString = utf8.decode(record.payload.sublist(record.payload[0] + 1));
+            final Map<String, dynamic> decodedData = jsonDecode(payloadString);
+            // Ensure keys are strings and values are strings
+            final Map<String, String> stringData = decodedData.map((key, value) => MapEntry(key, value.toString()));
+            onDataReceived(stringData);
+            NfcManager.instance.stopSession();
+            _showSnackBar(context, 'Device info received!');
+          } catch (e) {
+            NfcManager.instance.stopSession(errorMessage: 'Data parsing error: $e');
+            _showSnackBar(context, 'Error parsing data from tag: $e');
+          }
         } else {
-           NfcManager.instance.stopSession(errorMessage: 'Unsupported record type.');
-           _showSnackBar(context, 'Tag contains unsupported data format.');
+          NfcManager.instance.stopSession(errorMessage: 'Unsupported record type.');
+          _showSnackBar(context, 'Tag contains unsupported data format.');
         }
       } else {
         NfcManager.instance.stopSession(errorMessage: 'No NDEF message found.');
         _showSnackBar(context, 'No NDEF data found on tag.');
       }
     }, onError: (error) async {
-       _showSnackBar(context, 'NFC Error: ${error.message}');
+      _showSnackBar(context, 'NFC Error: ${error.message}');
     });
   }
 
   /// Shows a SnackBar message to the user.
-  /// 
+  ///
   /// Parameters:
   ///   - context: BuildContext for showing the SnackBar
   ///   - message: The message to display
