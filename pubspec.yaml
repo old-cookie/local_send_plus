@@ -23,11 +23,10 @@ dependencies:
   device_info_plus: ^11.3.3
   image_editor_plus: ^1.0.6
   uuid: ^4.4.2
-  basic_utils: ^5.8.2
+  basic_utils: ^5.7.0
   image: ^4.5.4
   flutter_video_thumbnail_plus: ^1.0.5
   image_gallery_saver_plus: ^4.0.1
-  shared_preferences: ^2.2.4
   video_editor: ^3.0.0
   image_picker: ^1.0.7
   path: ^1.9.1
@@ -42,6 +41,7 @@ dependencies:
   universal_html: ^2.2.4
   pretty_qr_code: ^3.4.0
   mobile_scanner: ^6.0.10
+  encrypt_shared_preferences: ^0.9.9
 
 dependency_overrides:
   video_thumbnail:

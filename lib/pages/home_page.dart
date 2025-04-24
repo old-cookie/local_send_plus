@@ -16,7 +16,7 @@ import 'package:local_send_plus/widgets/received_file_dialog.dart';
 import 'package:local_send_plus/widgets/received_text_dialog.dart';
 import 'package:local_send_plus/models/received_file_info.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// Remove shared_preferences import, use provider from main.dart
 import 'dart:convert';
 import 'package:image_editor_plus/image_editor_plus.dart';
 import 'package:local_send_plus/pages/video_editor_page.dart';
@@ -31,6 +31,8 @@ import 'package:ffmpeg_kit_flutter_new/statistics.dart';
 import 'package:local_send_plus/pages/settings_page.dart';
 import 'package:local_send_plus/features/ai_chat/chat_screen.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
+// Import main.dart provider instead of settings_provider's local one
+import 'package:local_send_plus/main.dart' show sharedPreferencesProvider;
 import 'package:local_send_plus/providers/settings_provider.dart';
 import 'package:local_send_plus/features/server/server_provider.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -146,9 +148,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _loadFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    final List<String>? favoritesJson = prefs.getStringList(_favoritesPrefKey);
+    // Use the provider from main.dart
+    final prefs = ref.read(sharedPreferencesProvider);
+    // Await getStringList
+    final List<String>? favoritesJson = await prefs.getStringList(_favoritesPrefKey);
     if (favoritesJson != null) {
       if (!mounted) return;
       setState(() {
@@ -158,9 +161,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _saveFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
+    // Use the provider from main.dart
+    final prefs = ref.read(sharedPreferencesProvider);
     final List<String> favoritesJson = _favorites.map((device) => jsonEncode(device.toJson())).toList();
+    // Await setStringList
     await prefs.setStringList(_favoritesPrefKey, favoritesJson);
   }
 

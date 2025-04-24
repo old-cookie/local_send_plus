@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:local_send_plus/providers/settings_provider.dart' hide sharedPreferencesProvider;
+import 'package:local_send_plus/providers/settings_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:local_send_plus/main.dart';
 
@@ -12,20 +12,40 @@ void selectionHaptic() {
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
+
+  // Make the method synchronous and return Widget
   Widget _buildBrightnessSegmentedButton(BuildContext context, WidgetRef ref) {
-    final prefs = ref.watch(sharedPreferencesProvider);
-    final currentBrightness = prefs.getString("brightness") ?? "system";
+    // Watch the theme state provider synchronously
+    final themeState = ref.watch(themeStateNotifierProvider);
+    final currentMode = themeState.mode;
+
+    // Convert ThemeMode enum to string for SegmentedButton
+    String currentBrightnessString;
+    switch (currentMode) {
+      case ThemeMode.dark:
+        currentBrightnessString = "dark";
+        break;
+      case ThemeMode.light:
+        currentBrightnessString = "light";
+        break;
+      case ThemeMode.system:
+      default:
+        currentBrightnessString = "system";
+        break;
+    }
+
     return SegmentedButton<String>(
       segments: const [
         ButtonSegment(value: "dark", label: Text("Dark"), icon: Icon(Icons.brightness_4_rounded)),
         ButtonSegment(value: "system", label: Text("System"), icon: Icon(Icons.brightness_auto_rounded)),
         ButtonSegment(value: "light", label: Text("Light"), icon: Icon(Icons.brightness_high_rounded)),
       ],
-      selected: {currentBrightness},
+      selected: {currentBrightnessString}, // Use the converted string
       onSelectionChanged: (Set<String> newSelection) async {
         selectionHaptic();
         final newBrightness = newSelection.first;
-        await ref.read(themeModeNotifierProvider.notifier).setThemeMode(newBrightness);
+        // Use the renamed provider
+        await ref.read(themeStateNotifierProvider.notifier).setThemeMode(newBrightness);
       },
     );
   }
@@ -129,7 +149,11 @@ class SettingsPage extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.brightness_6_outlined),
             title: const Text('Brightness'),
-            subtitle: Padding(padding: const EdgeInsets.only(top: 8.0), child: _buildBrightnessSegmentedButton(context, ref)),
+            // Call the synchronous widget directly
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: _buildBrightnessSegmentedButton(context, ref), // Remove FutureBuilder
+            ),
           ),
           const Divider(),
         ],
