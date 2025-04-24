@@ -26,7 +26,8 @@ const String _prefDestinationDir = 'pref_destination_dir';
 const String _prefUseBiometricAuth = 'pref_use_biometric_auth';
 const String _prefFavoriteDevices = 'pref_favorite_devices'; // Key for favorites
 
-// Represents the state of all settings
+/// Represents the complete state of application settings
+/// Contains device alias, destination directory, biometric auth setting and favorite devices
 class SettingsState {
   final String alias;
   final String? destinationDir;
@@ -56,7 +57,8 @@ class SettingsState {
   }
 }
 
-// Manages the SettingsState
+/// Manages the application settings state and persistence
+/// Handles loading, saving and updating all settings
 class SettingsNotifier extends StateNotifier<SettingsState> {
   final EncryptedSharedPreferencesAsync _prefs;
   static final DeviceInfoPlugin _deviceInfoPlugin = DeviceInfoPlugin(); // Instance for device info
@@ -144,6 +146,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
    }
 
 
+  /// Sets a new device alias
+  /// [newAlias] The new alias to set. Must not be empty.
   Future<void> setAlias(String newAlias) async {
     if (newAlias.isNotEmpty) {
       await _prefs.setString(_prefDeviceAlias, newAlias);
@@ -151,6 +155,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
   }
 
+  /// Sets or clears the destination directory for file downloads
+  /// [newDir] The new directory path, or null to clear
   Future<void> setDestinationDirectory(String? newDir) async {
     if (newDir == null) {
       await _prefs.remove(_prefDestinationDir);
@@ -161,11 +167,15 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
   }
 
+  /// Enables or disables biometric authentication
+  /// [enabled] Whether biometric auth should be enabled
   Future<void> setBiometricAuth(bool enabled) async {
     await _prefs.setBool(_prefUseBiometricAuth, enabled);
     state = state.copyWith(useBiometricAuth: enabled);
   }
 
+  /// Adds a device to favorites if not already present
+  /// [deviceData] Map containing device info with 'ip' and 'name' keys
   Future<void> addFavoriteDevice(Map<String, String> deviceData) async {
     // Avoid duplicates based on IP (or a combination if needed)
     if (state.favoriteDevices.any((fav) => fav['ip'] == deviceData['ip'])) {
@@ -178,6 +188,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(favoriteDevices: updatedFavorites);
   }
 
+  /// Removes a device from favorites by matching IP
+  /// [deviceData] Map containing device info, must include 'ip' key
   Future<void> removeFavoriteDevice(Map<String, String> deviceData) async {
      // Ensure deviceData has an 'ip' key before proceeding
      if (!deviceData.containsKey('ip')) {
@@ -192,7 +204,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
    }
 }
 
-// Use this provider to ensure settings are loaded before accessing them
+/// Provider that ensures settings are fully loaded before access
+/// Returns a Future<SettingsState> that completes when settings are loaded
 final settingsFutureProvider = FutureProvider<SettingsState>((ref) async {
   // Assuming sharedPreferencesProvider is Provider<EncryptedSharedPreferencesAsync>
   // If it's FutureProvider<EncryptedSharedPreferencesAsync>, use .future
@@ -203,10 +216,11 @@ final settingsFutureProvider = FutureProvider<SettingsState>((ref) async {
   return initialState;
 });
 
-// The main provider for settings state, depends on the future provider being loaded
+/// Main settings provider that maintains the current settings state
+/// Provides access to settings values and methods to modify them
 final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>((ref) {
   // Watch the future provider. When it completes, its data is used.
-  final asyncState = ref.watch(settingsFutureProvider);
+  ref.watch(settingsFutureProvider);
 
   // Provide a temporary/loading state until the future completes
   // This requires SettingsNotifier to handle an initial dummy state or for loadInitialState to be synchronous (which it isn't)
@@ -226,9 +240,7 @@ final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>(
   ));
 });
 
-// --- Convenience Providers for individual settings (Optional but helpful) ---
-
-// Provider for just the device alias
+/// Provides convenient access to just the device alias
 final deviceAliasProvider = Provider<String>((ref) {
   // Watch the main StateNotifierProvider to get live updates
   final settingsState = ref.watch(settingsProvider);
@@ -237,21 +249,21 @@ final deviceAliasProvider = Provider<String>((ref) {
   // if accessed before settingsFutureProvider completes.
 });
 
-// Provider for just the destination directory
+/// Provides convenient access to just the destination directory
 final destinationDirectoryProvider = Provider<String?>((ref) {
   // Watch the main StateNotifierProvider to get live updates
   final settingsState = ref.watch(settingsProvider);
   return settingsState.destinationDir;
 });
 
-// Provider for just the biometric auth setting
+/// Provides convenient access to just the biometric auth setting
 final biometricAuthProvider = Provider<bool>((ref) {
   // Watch the main StateNotifierProvider to get live updates
   final settingsState = ref.watch(settingsProvider);
   return settingsState.useBiometricAuth;
 });
 
-// Provider for the list of favorite devices
+/// Provides convenient access to just the list of favorite devices
 final favoriteDevicesProvider = Provider<List<Map<String, String>>>((ref) {
   // Watch the StateNotifierProvider directly to get live updates
   final settingsState = ref.watch(settingsProvider);

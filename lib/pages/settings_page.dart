@@ -6,14 +6,20 @@ import 'package:local_send_plus/providers/settings_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:local_send_plus/main.dart';
 
+/// Helper function to provide haptic feedback on selection
 void selectionHaptic() {
   HapticFeedback.selectionClick();
 }
 
+/// Settings page widget that displays and manages all app settings
+/// Uses ConsumerWidget to access app state through Riverpod
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
-  // Make the method synchronous and return Widget
+  /// Builds a segmented button for theme selection
+  /// [context] - BuildContext for the widget
+  /// [ref] - WidgetRef for state management
+  /// Returns a SegmentedButton widget for theme selection
   Widget _buildBrightnessSegmentedButton(BuildContext context, WidgetRef ref) {
     // Watch the theme state provider synchronously
     final themeState = ref.watch(themeStateNotifierProvider);
@@ -29,8 +35,7 @@ class SettingsPage extends ConsumerWidget {
         currentBrightnessString = "light";
         break;
       case ThemeMode.system:
-      default:
-        currentBrightnessString = "system";
+      currentBrightnessString = "system";
         break;
     }
 
@@ -50,6 +55,10 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
+  /// Shows a dialog to edit the device alias
+  /// [context] - BuildContext for the dialog
+  /// [ref] - WidgetRef for state management
+  /// [currentAlias] - Current device alias to show in the dialog
   Future<void> _showEditAliasDialog(BuildContext context, WidgetRef ref, String currentAlias) async {
     final TextEditingController controller = TextEditingController(text: currentAlias);
     return showDialog<void>(
@@ -87,6 +96,9 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
+  /// Opens a directory picker to select destination directory for downloads
+  /// [context] - BuildContext for showing feedback
+  /// [ref] - WidgetRef for state management
   Future<void> _pickDestinationDirectory(BuildContext context, WidgetRef ref) async {
     try {
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select Destination Directory');
@@ -109,6 +121,10 @@ class SettingsPage extends ConsumerWidget {
     }
   }
 
+  /// Builds the settings page UI with all available options
+  /// [context] - BuildContext for the widget
+  /// [ref] - WidgetRef for accessing app state
+  /// Returns a Scaffold containing the settings UI
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final String currentAlias = ref.watch(deviceAliasProvider);

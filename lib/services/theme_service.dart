@@ -3,8 +3,21 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:encrypt_shared_preferences/provider.dart';
 
+/// Light theme color scheme for the application
 ColorScheme? colorSchemeLight;
+
+/// Dark theme color scheme for the application
 ColorScheme? colorSchemeDark;
+
+/// Resets the system navigation bar and status bar appearance
+/// 
+/// Parameters:
+///   - context: The build context
+///   - prefs: Encrypted shared preferences instance
+///   - color: Optional base color for the system UI
+///   - statusBarColor: Optional specific color for the status bar
+///   - systemNavigationBarColor: Optional specific color for the navigation bar
+///   - delay: Optional delay before applying the changes
 Future<void> resetSystemNavigation(
   BuildContext context,
   EncryptedSharedPreferencesAsync prefs, {
@@ -35,6 +48,13 @@ Future<void> resetSystemNavigation(
   });
 }
 
+/// Modifies the base theme with custom transition animations
+/// 
+/// Parameters:
+///   - theme: The base theme to modify
+/// 
+/// Returns:
+///   Modified ThemeData with custom page transitions
 ThemeData themeModifier(ThemeData theme) {
   return theme.copyWith(
     pageTransitionsTheme: const PageTransitionsTheme(
@@ -43,7 +63,14 @@ ThemeData themeModifier(ThemeData theme) {
   );
 }
 
-// Return Future<ThemeData> and make async
+/// Gets the current theme based on system settings and user preferences
+/// 
+/// Parameters:
+///   - context: The build context
+///   - prefs: Encrypted shared preferences instance
+/// 
+/// Returns:
+///   The appropriate ThemeData based on current settings
 Future<ThemeData> themeCurrent(BuildContext context, EncryptedSharedPreferencesAsync prefs) async {
   final currentMode = await themeMode(prefs); // Await themeMode
   if (currentMode == ThemeMode.system) {
@@ -61,7 +88,13 @@ Future<ThemeData> themeCurrent(BuildContext context, EncryptedSharedPreferencesA
   }
 }
 
-// Return Future<ThemeData> and make async
+/// Gets the light theme configuration
+/// 
+/// Parameters:
+///   - prefs: Encrypted shared preferences instance
+/// 
+/// Returns:
+///   Light theme configuration with appropriate color scheme
 Future<ThemeData> themeLight(EncryptedSharedPreferencesAsync prefs) async {
   // Await getBool and provide default value, add null assertion
   if (!(await prefs.getBool("useDeviceTheme", defaultValue: false))! || colorSchemeLight == null) {
@@ -85,7 +118,13 @@ Future<ThemeData> themeLight(EncryptedSharedPreferencesAsync prefs) async {
   }
 }
 
-// Return Future<ThemeData> and make async
+/// Gets the dark theme configuration
+/// 
+/// Parameters:
+///   - prefs: Encrypted shared preferences instance
+/// 
+/// Returns:
+///   Dark theme configuration with appropriate color scheme
 Future<ThemeData> themeDark(EncryptedSharedPreferencesAsync prefs) async {
   // Await getBool and provide default value, add null assertion
   if (!(await prefs.getBool("useDeviceTheme", defaultValue: false))! || colorSchemeDark == null) {
@@ -109,7 +148,13 @@ Future<ThemeData> themeDark(EncryptedSharedPreferencesAsync prefs) async {
   }
 }
 
-// Return Future<ThemeMode> and make async
+/// Gets the current theme mode from preferences
+/// 
+/// Parameters:
+///   - prefs: Encrypted shared preferences instance
+/// 
+/// Returns:
+///   ThemeMode based on user preferences (system, light, or dark)
 Future<ThemeMode> themeMode(EncryptedSharedPreferencesAsync prefs) async {
   // Await getString and provide default value
   final brightness = await prefs.getString("brightness", defaultValue: "system");

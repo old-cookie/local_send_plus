@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:video_editor/video_editor.dart';
 
+/// A page for cropping videos using the video_editor package.
+/// This page provides various aspect ratio options and a visual grid for precise cropping.
+/// Note: Video cropping is not supported on web platforms.
 class CropPage extends StatefulWidget {
   final VideoEditorController controller;
   const CropPage({super.key, required this.controller});
@@ -9,9 +12,12 @@ class CropPage extends StatefulWidget {
   State<CropPage> createState() => _CropPageState();
 }
 
+/// State class for the CropPage widget.
+/// Manages the video cropping interface and user interactions.
 class _CropPageState extends State<CropPage> {
   @override
   void initState() {
+    // Check for web platform and show unsupported message
     super.initState();
     if (kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -25,9 +31,12 @@ class _CropPageState extends State<CropPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Show loading indicator for web platforms
     if (kIsWeb) {
       return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator()));
     }
+
+    // Main scaffold with video cropping interface
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -61,6 +70,17 @@ class _CropPageState extends State<CropPage> {
     );
   }
 
+  /// Builds a row of aspect ratio selection buttons.
+  /// Available ratios:
+  /// - Free: No aspect ratio constraint
+  /// - Original: Uses the video's original aspect ratio
+  /// - 1:1: Square aspect ratio
+  /// - 16:9: Widescreen landscape
+  /// - 9:16: Widescreen portrait
+  /// - 4:3: Traditional landscape
+  /// - 3:4: Traditional portrait
+  /// 
+  /// @return Widget A wrapped row of ratio selection buttons
   Widget _buildRatioButtons() {
     final Map<String, double?> ratios = {
       'Free': null,

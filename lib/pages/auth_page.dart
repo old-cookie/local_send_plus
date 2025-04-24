@@ -7,18 +7,24 @@ import 'package:local_send_plus/features/security/security_service.dart';
 import 'package:local_send_plus/pages/home_page.dart';
 import 'package:local_send_plus/providers/settings_provider.dart';
 
+/// AuthPage is the initial authentication screen that handles biometric verification
+/// before allowing access to the main application.
 class AuthPage extends ConsumerStatefulWidget {
   const AuthPage({super.key});
   @override
   ConsumerState<AuthPage> createState() => _AuthPageState();
 }
 
+/// State management for AuthPage, handling biometric authentication flow
+/// and user interface states
 class _AuthPageState extends ConsumerState<AuthPage> {
-  bool _isAuthenticating = false;
-  bool _authFailed = false;
-  String _statusText = '';
-  bool _showBiometricHelp = false;
-  String _biometricErrorCode = '';
+  // Authentication state flags
+  bool _isAuthenticating = false;    // Tracks if authentication is in progress
+  bool _authFailed = false;          // Indicates if the last authentication attempt failed
+  String _statusText = '';           // Displays current authentication status
+  bool _showBiometricHelp = false;   // Controls visibility of help section
+  String _biometricErrorCode = '';   // Stores biometric error codes for troubleshooting
+
   @override
   void initState() {
     super.initState();
@@ -28,6 +34,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     });
   }
 
+  /// Initiates the authentication process based on platform and settings
   Future<void> _checkAndAuthenticate() async {
     print('Checking authentication method');
     if (kIsWeb) {
@@ -46,6 +53,8 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     }
   }
 
+  /// Handles the biometric authentication process
+  /// Displays biometric prompt and processes the authentication result
   Future<void> _authenticate() async {
     if (_isAuthenticating) {
       print('Authentication already in progress, ignoring request');
@@ -79,12 +88,14 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     }
   }
 
+  /// Navigates to the main application after successful authentication
   void _proceedToApp() {
     if (!mounted) return;
     print('Proceeding to HomePage');
     Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const HomePage()));
   }
 
+  /// Handles application exit based on platform
   void _exitApp() {
     print('User chose to exit app');
     if (Platform.isAndroid) {
@@ -94,6 +105,8 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     }
   }
 
+  /// Builds the help section UI with troubleshooting information
+  /// based on specific biometric error codes
   Widget _buildBiometricHelpSection() {
     String helpMessage = '';
     switch (_biometricErrorCode) {
@@ -132,6 +145,11 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     );
   }
 
+  /// Builds the main authentication UI including:
+  /// - Biometric icon
+  /// - Status messages
+  /// - Help section
+  /// - Authentication buttons
   @override
   Widget build(BuildContext context) {
     return Scaffold(

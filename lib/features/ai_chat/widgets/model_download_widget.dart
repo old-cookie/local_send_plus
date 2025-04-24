@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/model_download_provider.dart';
 
+/// A widget that displays the progress of downloading the AI model
+/// and allows the user to retry or cancel the download.
 class ModelDownloadWidget extends ConsumerWidget {
+  /// Creates a [ModelDownloadWidget].
   const ModelDownloadWidget({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,6 +44,10 @@ class ModelDownloadWidget extends ConsumerWidget {
     );
   }
 
+  /// Builds the appropriate status indicator based on the current [DownloadStatus].
+  ///
+  /// This includes displaying progress, success messages, error messages,
+  /// and providing context-specific actions like retrying a failed download.
   Widget _buildStatusIndicator(BuildContext context, ModelDownloadState state, ModelDownloadNotifier notifier) {
     switch (state.status) {
       case DownloadStatus.notStarted:

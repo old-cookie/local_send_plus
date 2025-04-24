@@ -36,30 +36,47 @@ import 'package:local_send_plus/providers/settings_provider.dart'; // Includes N
 import 'package:local_send_plus/features/server/server_provider.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:local_send_plus/pages/qr_scanner_page.dart';
-import 'package:local_send_plus/services/nfc_service.dart'; // Explicit import for clarity if needed
 
+/// HomePage is the main screen of the LocalSend Plus application.
+/// It provides functionality for:
+/// - Discovering and displaying nearby devices
+/// - Sending files and text messages to other devices
+/// - Managing favorite devices
+/// - NFC communication capabilities
+/// - QR code scanning and generation
+/// - File editing capabilities (image and video)
+/// 
+/// The page maintains state for:
+/// - Currently selected file or text for sending
+/// - Discovery and server services
+/// - Connection status and local IP address
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
+/// The state class for HomePage that manages the UI and business logic
+/// for the local file sharing functionality.
 class _HomePageState extends ConsumerState<HomePage> {
-  String? _selectedFilePath;
-  String? _selectedFileName;
-  Uint8List? _selectedFileBytes;
-  bool _isSending = false;
-  final TextEditingController _ipController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _textController = TextEditingController();
-  // Remove local _favorites list - use provider directly
-  // static const String _favoritesPrefKey = 'favorite_devices';
-  StreamSubscription? _receivedFileSubscription;
-  StreamSubscription? _receivedTextSubscription;
-  DiscoveryService? _discoveryService;
-  ServerService? _serverService;
-  String? _localIpAddress;
-  String? _scanResult;
+  // File selection state
+  String? _selectedFilePath;     // Path to selected file (native platforms)
+  String? _selectedFileName;     // Name of the selected file
+  Uint8List? _selectedFileBytes; // File data (web platform or edited files)
+  bool _isSending = false;       // Tracks if a file transfer is in progress
+
+  // Text input controllers
+  final TextEditingController _ipController = TextEditingController();     // For manual IP entry
+  final TextEditingController _nameController = TextEditingController();   // For device name entry
+  final TextEditingController _textController = TextEditingController();   // For text message input
+
+  // Service subscriptions and instances
+  StreamSubscription? _receivedFileSubscription; // Listens for incoming files
+  StreamSubscription? _receivedTextSubscription; // Listens for incoming text messages
+  DiscoveryService? _discoveryService;           // Handles device discovery
+  ServerService? _serverService;                 // Manages the local server
+  String? _localIpAddress;                       // Stores the device's IP address
+  String? _scanResult;                          // Stores QR scan results
 
   @override
   void initState() {

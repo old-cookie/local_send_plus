@@ -3,15 +3,29 @@ import 'package:flutter/services.dart';
 import 'package:flutter_link_previewer/flutter_link_previewer.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' show PreviewData;
 
+/// A dialog widget that displays received text content with link preview functionality.
+/// This widget allows users to view the received text and copy it to the clipboard.
 class ReceivedTextDialog extends StatefulWidget {
+  /// The text content that was received and will be displayed in the dialog.
   final String receivedText;
+
+  /// Creates a [ReceivedTextDialog] with the specified received text.
+  /// 
+  /// Parameters:
+  /// - [receivedText]: The text content to be displayed in the dialog.
+  /// - [key]: An optional key to uniquely identify this widget.
   const ReceivedTextDialog({super.key, required this.receivedText});
+
   @override
   State<ReceivedTextDialog> createState() => _ReceivedTextDialogState();
 }
 
+/// The state for the [ReceivedTextDialog] widget.
+/// Handles the preview data state and builds the dialog UI.
 class _ReceivedTextDialogState extends State<ReceivedTextDialog> {
+  /// Stores the preview data for any links found in the received text.
   PreviewData? _previewData;
+
   @override
   Widget build(BuildContext context) {
     final previewWidth = MediaQuery.of(context).size.width * 0.7;

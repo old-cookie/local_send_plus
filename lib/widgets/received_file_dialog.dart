@@ -11,9 +11,15 @@ import 'package:mime/mime.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_video_thumbnail_plus/flutter_video_thumbnail_plus.dart';
 
+/// A dialog widget that displays received file information and provides options to keep or delete the file.
+/// Shows a thumbnail preview for images and videos, and handles file operations across different platforms.
 class ReceivedFileDialog extends ConsumerStatefulWidget {
   final ReceivedFileInfo fileInfo;
+
+  /// Creates a ReceivedFileDialog instance.
+  /// [fileInfo] contains information about the received file including path and filename.
   const ReceivedFileDialog({super.key, required this.fileInfo});
+
   @override
   ConsumerState<ReceivedFileDialog> createState() => _ReceivedFileDialogState();
 }
@@ -29,6 +35,9 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
     _generateThumbnail();
   }
 
+  /// Generates a thumbnail for the received file if it's an image or video.
+  /// Updates the UI state during and after thumbnail generation.
+  /// Handles different file types and potential errors during generation.
   Future<void> _generateThumbnail() async {
     setState(() {
       _isLoadingThumbnail = true;
@@ -58,6 +67,9 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
     }
   }
 
+  /// Decodes and resizes an image from bytes to create a thumbnail.
+  /// [fileBytes] The raw bytes of the image file.
+  /// Returns a Uint8List containing the compressed thumbnail data, or null if processing fails.
   static Future<Uint8List?> _decodeAndResizeImage(Uint8List fileBytes) async {
     img.Image? image = img.decodeImage(fileBytes);
     if (image != null) {
@@ -67,6 +79,9 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
     return null;
   }
 
+  /// Deletes the received file from the file system.
+  /// Shows appropriate feedback messages based on the operation result.
+  /// Clears the received file state and closes the dialog after operation.
   Future<void> _deleteFile(BuildContext context) async {
     try {
       final file = File(widget.fileInfo.path);
@@ -95,6 +110,10 @@ class _ReceivedFileDialogState extends ConsumerState<ReceivedFileDialog> {
     }
   }
 
+  /// Processes the file keeping operation based on platform and file type.
+  /// For web: Initiates browser download
+  /// For native platforms: Saves to gallery if image/video, or keeps in temp location
+  /// Shows appropriate feedback messages and handles cleanup after operation.
   Future<void> _keepFile(BuildContext context) async {
     String message = 'File "${widget.fileInfo.filename}" kept.';
     bool deleteOriginal = false;

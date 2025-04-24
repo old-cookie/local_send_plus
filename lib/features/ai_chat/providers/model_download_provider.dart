@@ -3,13 +3,36 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 
-enum DownloadStatus { notStarted, downloading, completed, error }
+/// Represents the status of the model download process.
+enum DownloadStatus {
+  /// Download has not started yet.
+  notStarted,
+  /// Download is currently in progress.
+  downloading,
+  /// Download has completed successfully.
+  completed,
+  /// An error occurred during download.
+  error
+}
 
+/// Represents the state of the model download, including status, progress, and error messages.
 class ModelDownloadState {
+  /// The current status of the download.
   final DownloadStatus status;
+  /// The download progress, ranging from 0.0 to 1.0.
   final double progress;
+  /// An optional error message if the download failed.
   final String? errorMessage;
+
+  /// Creates a new instance of [ModelDownloadState].
   const ModelDownloadState({this.status = DownloadStatus.notStarted, this.progress = 0.0, this.errorMessage});
+
+  /// Creates a copy of the current state with optional updated values.
+  ///
+  /// [status] The new download status.
+  /// [progress] The new download progress.
+  /// [errorMessage] The new error message.
+  /// [clearError] If true, clears the existing error message.
   ModelDownloadState copyWith({DownloadStatus? status, double? progress, String? errorMessage, bool clearError = false}) {
     return ModelDownloadState(
       status: status ?? this.status,
@@ -19,10 +42,21 @@ class ModelDownloadState {
   }
 }
 
+/// Manages the state and logic for downloading AI models.
 class ModelDownloadNotifier extends StateNotifier<ModelDownloadState> {
+  /// Creates a new instance of [ModelDownloadNotifier].
   ModelDownloadNotifier() : super(const ModelDownloadState());
+
+  /// The Dio instance used for network requests.
   final Dio _dio = Dio();
+  /// A token to cancel the ongoing download request.
   CancelToken? _cancelToken;
+
+  /// Starts downloading the model from the given [url] and saves it as [filename].
+  ///
+  /// Checks if the file already exists before starting the download.
+  /// Updates the state with progress and status changes.
+  /// Handles potential errors during the download process.
   Future<void> downloadModel(String url, String filename) async {
     if (state.status == DownloadStatus.downloading) return; // Prevent multiple downloads
     _cancelToken = CancelToken();
@@ -79,6 +113,9 @@ class ModelDownloadNotifier extends StateNotifier<ModelDownloadState> {
     }
   }
 
+  /// Cleans up partially downloaded files if an error occurs.
+  ///
+  /// [filename] The name of the file to potentially delete.
   Future<void> _cleanupFailedDownload(String filename) async {
     try {
       final dir = await getApplicationDocumentsDirectory();
@@ -93,16 +130,21 @@ class ModelDownloadNotifier extends StateNotifier<ModelDownloadState> {
     }
   }
 
+  /// Cancels the ongoing download if there is one.
   void cancelDownload() {
     _cancelToken?.cancel("Download cancelled by user.");
   }
 
+  /// Resets the download state to its initial values.
   void resetState() {
     if (mounted) {
       state = const ModelDownloadState();
     }
   }
 
+  /// Cleans up resources when the notifier is disposed.
+  ///
+  /// Cancels any ongoing download.
   @override
   void dispose() {
     cancelDownload();
@@ -110,6 +152,7 @@ class ModelDownloadNotifier extends StateNotifier<ModelDownloadState> {
   }
 }
 
+/// Provides the [ModelDownloadNotifier] instance to the application.
 final modelDownloadProvider = StateNotifierProvider<ModelDownloadNotifier, ModelDownloadState>((ref) {
   return ModelDownloadNotifier();
 });

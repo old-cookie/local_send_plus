@@ -18,7 +18,20 @@ const int _defaultPort = 2706;
 class ServerService {
   final Ref _ref;
   HttpServer? _server;
+
+  /// Constructs a [ServerService] instance
+  /// 
+  /// [_ref] - Riverpod reference for state management
+  /// [initialPort] - Initial port number for the server (defaults to 2706)
   ServerService(this._ref, {int initialPort = _defaultPort});
+
+  /// Starts the HTTP server with file and text receiving capabilities
+  /// 
+  /// Sets up routes for:
+  /// - `/` - Basic server health check
+  /// - `/info` - Server information endpoint
+  /// - `/receive` - File upload endpoint
+  /// - `/receive-text` - Text receiving endpoint
   Future<void> startServer() async {
     if (_server != null) {
       print('Server already running on port ${_server!.port}');
@@ -55,6 +68,9 @@ class ServerService {
     }
   }
 
+  /// Stops the running server instance
+  /// 
+  /// Forces the server to close and updates the server state
   Future<void> stopServer() async {
     if (_server == null) return;
     print('Stopping server...');
@@ -64,13 +80,29 @@ class ServerService {
     print('Server stopped.');
   }
 
+  /// Returns the current port number of the running server
+  /// Returns null if server is not running
   int? get runningPort => _server?.port;
+
+  /// Handles server information requests
+  /// 
+  /// Returns JSON containing:
+  /// - alias: Device name
+  /// - version: Server version
+  /// - deviceModel: Operating system or 'web'
+  /// - https: SSL status
   Future<Response> _handleInfoRequest(Request request) async {
     final deviceModel = kIsWeb ? 'web' : Platform.operatingSystem;
     final deviceInfo = {'alias': 'MyDevice', 'version': '1.0.0', 'deviceModel': deviceModel, 'https': false};
     return Response.ok(jsonEncode(deviceInfo), headers: {'Content-Type': 'application/json'});
   }
 
+  /// Handles file upload requests
+  /// 
+  /// Processes multipart form data to save received files
+  /// Updates the [receivedFileProvider] with file information
+  /// 
+  /// Returns success/error response based on upload result
   Future<Response> _handleReceiveRequest(Request request, Ref ref) async {
     if (request.multipart() case var multipart?) {
       String? receivedFileName;
@@ -146,6 +178,11 @@ class ServerService {
     }
   }
 
+  /// Handles incoming text message requests
+  /// 
+  /// Processes plain text content and updates [receivedTextProvider]
+  /// 
+  /// Returns success/error response based on text processing result
   Future<Response> _handleReceiveTextRequest(Request request, Ref ref) async {
     try {
       final contentType = request.headers['content-type'];

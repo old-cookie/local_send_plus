@@ -6,6 +6,8 @@ import 'crop_page.dart';
 
 typedef ExportConfig = FFmpegVideoEditorExecute;
 
+// A screen for editing videos with features like trimming, cropping, and rotation
+// Supports basic video manipulation operations through an intuitive UI
 class VideoEditorScreen extends StatefulWidget {
   final File file;
   const VideoEditorScreen({super.key, required this.file});
@@ -14,9 +16,14 @@ class VideoEditorScreen extends StatefulWidget {
 }
 
 class _VideoEditorScreenState extends State<VideoEditorScreen> {
+  // Progress notifier for video export process (0.0 to 1.0)
   final _exportingProgress = ValueNotifier<double>(0.0);
+  // Flag to indicate if export configuration is being generated
   final _isGeneratingConfig = ValueNotifier<bool>(false);
+  // Height constant used for UI elements
   final double height = 60;
+  
+  // Main controller for video editing operations
   late final VideoEditorController _controller;
   @override
   void initState() {
@@ -45,6 +52,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     }, test: (e) => e is VideoMinDurationError);
   }
 
+  // Clean up resources when widget is disposed
   @override
   void dispose() {
     _exportingProgress.dispose();
@@ -53,12 +61,15 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     super.dispose();
   }
 
+  // Display error messages to user via SnackBar
   void _showErrorSnackBar(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
     }
   }
 
+  // Generate configuration for video export
+  // Returns FFmpegVideoEditorExecute object or null if error occurs
   Future<ExportConfig?> _getVideoExportConfig() async {
     if (!_controller.initialized) {
       _showErrorSnackBar("Editor not initialized.");
@@ -194,6 +205,11 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     );
   }
 
+  // Top navigation bar with controls for:
+  // - Closing editor
+  // - Rotating video
+  // - Accessing crop screen
+  // - Confirming changes
   Widget _topNavBar() {
     return SafeArea(
       child: SizedBox(
@@ -247,8 +263,11 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     );
   }
 
+  // Format duration into MM:SS string
   String formatter(Duration duration) =>
       [duration.inMinutes.remainder(60).toString().padLeft(2, '0'), duration.inSeconds.remainder(60).toString().padLeft(2, '0')].join(":");
+  // Build trim slider UI components
+  // Allows user to select start and end points of video
   List<Widget> _trimSlider() {
     return [
       AnimatedBuilder(
@@ -289,6 +308,8 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     ];
   }
 
+  // Build cover selection UI
+  // Allows user to choose thumbnail frame from video
   Widget _coverSelection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 15),

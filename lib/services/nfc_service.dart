@@ -7,7 +7,14 @@ import 'package:nfc_manager/nfc_manager.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
+/// A service class that handles NFC (Near Field Communication) operations.
+/// This class provides functionality for reading and writing device information using NFC tags.
 class NfcService {
+  /// Checks if NFC is available on the current device.
+  /// 
+  /// Returns:
+  ///   - true if NFC is available and can be used
+  ///   - false if NFC is not supported or disabled
   Future<bool> isNfcAvailable() async {
     if (kIsWeb) {
       return false; // NFC not available on web
@@ -17,6 +24,11 @@ class NfcService {
     return isAvailable;
   }
 
+  /// Retrieves device information including IP address and device name.
+  /// 
+  /// Returns:
+  ///   - Map containing 'ip' and 'name' if successful
+  ///   - null if the information cannot be retrieved
   Future<Map<String, String>?> _getDeviceInfo() async {
     final networkInfo = NetworkInfo();
     final deviceInfoPlugin = DeviceInfoPlugin();
@@ -44,7 +56,7 @@ class NfcService {
       }
 
 
-      if (ipAddress != null && deviceName != null) {
+      if (ipAddress != null) {
         return {'ip': ipAddress, 'name': deviceName};
       }
     } catch (e) {
@@ -53,6 +65,12 @@ class NfcService {
     return null;
   }
 
+  /// Writes device information to an NFC tag.
+  /// 
+  /// Parameters:
+  ///   - context: BuildContext for showing status messages
+  /// 
+  /// Shows progress and status via SnackBar messages.
   Future<void> writeNdef(BuildContext context) async {
     if (!await isNfcAvailable()) {
       _showSnackBar(context, 'NFC is not available on this device.');
@@ -95,6 +113,13 @@ class NfcService {
     });
   }
 
+  /// Reads device information from an NFC tag.
+  /// 
+  /// Parameters:
+  ///   - context: BuildContext for showing status messages
+  ///   - onDataReceived: Callback function to handle the received data
+  /// 
+  /// The callback receives a Map<String, String> containing the device information.
   Future<void> readNdef(BuildContext context, Function(Map<String, String> data) onDataReceived) async {
      if (!await isNfcAvailable()) {
       _showSnackBar(context, 'NFC is not available on this device.');
@@ -154,6 +179,11 @@ class NfcService {
     });
   }
 
+  /// Shows a SnackBar message to the user.
+  /// 
+  /// Parameters:
+  ///   - context: BuildContext for showing the SnackBar
+  ///   - message: The message to display
   void _showSnackBar(BuildContext context, String message) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

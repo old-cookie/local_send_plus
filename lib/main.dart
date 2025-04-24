@@ -8,22 +8,26 @@ import 'package:local_send_plus/services/theme_service.dart';
 import 'package:encrypt_shared_preferences/provider.dart';
 import 'package:local_send_plus/features/security/custom_encryptor.dart'; // Import the custom encryptor
 
-// Define a record type for the theme state
+/// A record type that represents the complete theme state of the application.
+/// Contains the current theme mode and both light and dark theme data.
 typedef ThemeState = ({ThemeMode mode, ThemeData lightTheme, ThemeData darkTheme});
 
-// Update provider to use EncryptedSharedPreferencesAsync
+/// Provider for encrypted shared preferences instance.
+/// This provider must be overridden with an actual implementation.
 final sharedPreferencesProvider = Provider<EncryptedSharedPreferencesAsync>((ref) {
   throw UnimplementedError('EncryptedSharedPreferencesAsync provider was not overridden');
 });
 
-// Update StateNotifierProvider to use the new ThemeState record
+/// StateNotifierProvider that manages the theme state of the application.
+/// Provides access to the current theme mode and theme data.
 final themeStateNotifierProvider = StateNotifierProvider<ThemeStateNotifier, ThemeState>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
   // Provide initial default themes while loading
   return ThemeStateNotifier(prefs)..loadInitialTheme();
 });
 
-// Update StateNotifier to manage ThemeState and handle async operations
+/// Manages the theme state and handles theme-related operations.
+/// Provides functionality to load and change themes asynchronously.
 class ThemeStateNotifier extends StateNotifier<ThemeState> {
   final EncryptedSharedPreferencesAsync _prefs;
 
@@ -34,7 +38,8 @@ class ThemeStateNotifier extends StateNotifier<ThemeState> {
           darkTheme: themeModifier(ThemeData.dark()) // Default dark theme
         ));
 
-  // Load initial theme asynchronously
+  /// Loads the initial theme configuration from encrypted shared preferences.
+  /// This includes theme mode and both light and dark theme data.
   Future<void> loadInitialTheme() async {
     final mode = await _calculateThemeMode(_prefs);
     final light = await themeLight(_prefs);
@@ -42,12 +47,14 @@ class ThemeStateNotifier extends StateNotifier<ThemeState> {
     state = (mode: mode, lightTheme: light, darkTheme: dark);
   }
 
-  // Make calculation async and return Future<ThemeMode>
+  /// Calculates the theme mode based on stored preferences.
+  /// Returns a Future that resolves to the appropriate ThemeMode.
   static Future<ThemeMode> _calculateThemeMode(EncryptedSharedPreferencesAsync prefs) async {
     return await themeMode(prefs);
   }
 
-  // Update theme mode and themes
+  /// Updates the theme mode with the provided brightness value.
+  /// Stores the new value in encrypted shared preferences and updates the state.
   Future<void> setThemeMode(String brightnessValue) async {
     await _prefs.setString("brightness", brightnessValue);
     // Recalculate and update state
@@ -55,6 +62,8 @@ class ThemeStateNotifier extends StateNotifier<ThemeState> {
   }
 }
 
+/// The entry point of the application.
+/// Initializes necessary services and runs the app with provider scope.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Initialize EncryptedSharedPreferencesAsync with CustomEncryptor
@@ -67,6 +76,8 @@ void main() async {
   ));
 }
 
+/// The root widget of the application.
+/// Handles theme configuration and initial routing based on authentication status.
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
   @override
