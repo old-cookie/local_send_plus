@@ -35,10 +35,10 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
   /// The active chat instance with the Gemma model. Null until initialized.
   InferenceChat? _chat;
 
-  /// List of messages exchanged in the chat.
+  /// List of messages exchanged in the chat, displayed in the UI.
   final _messages = <Message>[];
 
-  /// Stores any error message that occurs during model initialization.
+  /// Stores any error message that occurs during model initialization or chat.
   String? _initializationError;
 
   /// Flag to indicate if a download check is needed. Set to true initially.
@@ -46,6 +46,76 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
 
   /// Flag to indicate if the model is ready for initialization (downloaded or local).
   bool _modelReadyForInitialization = false;
+
+  /// Flag to indicate if the initial prompt processing is complete.
+  bool _hasInitialPromptResponse = false;
+
+  /// Flag to indicate overall initialization state (download + model load + initial prompt).
+  bool _isInitializing = true; // Start as true
+
+  /// The initial system prompt for the AI assistant.
+  final String _initialPrompt = """
+You are the AI assistant for LocalSend Plus, a powerful cross-platform file and text sharing application. Your role is strictly limited to helping users with LocalSend Plus functionality.
+
+STRICT BOUNDARIES:
+- Only respond to questions and topics related to LocalSend Plus
+- Do not engage in general conversation or small talk
+- Do not provide information about other apps or services
+- Do not answer questions about topics outside of LocalSend Plus features
+- If asked about anything unrelated to LocalSend Plus, respond: "I can only assist with LocalSend Plus functionality. Please ask questions related to the app's features."
+
+Core Knowledge:
+1. File Sharing Capabilities
+- Guide users through sending various file types (images, videos, documents)
+- Explain the built-in media editing features:
+  * Photo editing before sending
+  * Video editing (non-web platforms)
+  * File selection and preview capabilities
+- Explain supported file formats and any size limitations
+
+2. Device Discovery & Connectivity
+- Help users understand different connection methods:
+  * Automatic network discovery
+  * QR code scanning/generation
+  * NFC sharing (on supported devices)
+  * Manual IP address connection
+- Guide users through the device favorites system
+- Troubleshoot connection issues
+
+3. Text Sharing Features
+- Explain text sharing capabilities
+- Guide users through the text input interface
+- Help with retry mechanisms if messages fail
+- Explain UTF-8 encoding and text handling
+
+4. Security and Privacy
+- Explain the app's security features
+- Guide users through secure file transfers
+- Help with encryption understanding
+
+5. Special Features
+- AI Chat functionality using Gemma model
+- Media editing capabilities
+- Device management
+- Settings customization
+
+Interaction Style:
+- Be concise and direct in explanations
+- Focus solely on app functionality
+- Provide step-by-step guidance when needed
+- Explain technical concepts in user-friendly terms
+- Stay within the scope of LocalSend Plus features
+
+Common Tasks to Assist With:
+1. Device Connection
+2. File Operations
+3. Text Sharing
+4. Device Management
+5. Troubleshooting
+
+IMPORTANT: Your responses must ONLY relate to LocalSend Plus functionality. Decline to answer any questions or engage in discussion about other topics.
+""";
+
 
   @override
   void dispose() {
@@ -85,10 +155,12 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
   /// Handles both loading models from assets and from downloaded files.
   /// Updates the state with the chat instance or an error message.
   Future<void> _initializeGemmaChat(String modelPath) async {
-    // Reset any previous initialization error.
-    if (!mounted) return; // Ensure the widget is still in the tree.
+    // Reset errors and set initializing state
+    if (!mounted) return;
     setState(() {
       _initializationError = null;
+      _isInitializing = true; // Mark as initializing
+      _hasInitialPromptResponse = false; // Reset prompt response flag
     });
     _logger.info("Initializing Gemma with model path: $modelPath");
     try {
@@ -126,18 +198,38 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
       );
       _logger.info("Gemma chat created successfully.");
 
-      // Update the UI if the widget is still mounted.
-      if (mounted) {
-        setState(() {}); // Trigger rebuild to show the chat UI.
+      // Send the initial system prompt but don't display it
+      try {
+        _logger.info("Sending initial system prompt...");
+        // Add the initial prompt as a query chunk.
+        final initialPromptMessage = Message(text: _initialPrompt, isUser: false); // Create Message object
+        await _chat!.addQueryChunk(initialPromptMessage);
+        // Generate the response stream and drain it to discard the output.
+        // This "warms up" the model with the context.
+        await _chat!.generateChatResponseAsync().drain(); // Use addQueryChunk + generateChatResponseAsync
+        _logger.info("Initial system prompt processed successfully.");
+        if (mounted) {
+          setState(() {
+            _hasInitialPromptResponse = true; // Mark prompt as processed
+            _isInitializing = false; // Mark overall initialization complete
+          });
+        }
+      } catch (e) {
+        _logger.severe("Error sending initial prompt", e);
+        if (mounted) {
+          setState(() {
+            _initializationError = "Failed to initialize AI assistant. Error: $e";
+            _isInitializing = false; // Still finish initializing, but show error
+          });
+        }
       }
     } catch (e) {
-      // Handle any errors during initialization.
+      // Handle any errors during model/chat creation.
       _logger.severe("Error initializing Gemma", e);
       if (mounted) {
         setState(() {
           _initializationError = "Failed to initialize AI model. Error: $e";
-          // Keep _modelReadyForInitialization true so the error is shown in the main UI area,
-          // replacing the loading indicator or download widget.
+          _isInitializing = false; // Mark initialization as finished (with error)
         });
       }
     }
@@ -229,20 +321,33 @@ class ChatScreenState extends ConsumerState<ChatScreen> {
 
     // Determine the main content widget based on the current state.
     Widget bodyContent;
+
+    // Show download widget if model isn't ready and download is needed/in progress/failed.
     if (!_modelReadyForInitialization &&
+        !widget.model.localModel && // Only show download for remote models
+        !kIsWeb && // Don't show download for web
         (downloadState.status == DownloadStatus.downloading ||
             downloadState.status == DownloadStatus.error ||
             downloadState.status == DownloadStatus.notStarted)) {
-      // Show download widget if model isn't ready and download is in progress, failed, or not started.
       bodyContent = const ModelDownloadWidget();
-    } else if (_modelReadyForInitialization && _chat == null && _initializationError == null) {
-      // Show loading indicator while initializing the model after download/check.
-      bodyContent = const LoadingWidget(message: 'Initializing AI model...');
-    } else if (_chat != null) {
-      // Show the chat interface if the chat is initialized.
+    }
+    // Show loading indicator during the entire initialization process (model load + initial prompt).
+    else if (_isInitializing || (_modelReadyForInitialization && !_hasInitialPromptResponse && _initializationError == null)) {
+       bodyContent = LoadingWidget(
+         message: !_modelReadyForInitialization
+             ? 'Preparing model...'
+             : 'Initializing AI Assistant...',
+       );
+    }
+    // Show error if initialization failed.
+    else if (_initializationError != null && _chat == null) {
+       bodyContent = Center(child: Text(_initializationError!));
+    }
+    // Show the chat interface if initialization is complete (including prompt) and chat is ready.
+    else if (_chat != null && _hasInitialPromptResponse) {
       bodyContent = Column(
         children: [
-          // Display an error banner if initialization failed previously but chat is now available (e.g., after retry).
+          // Display an error banner if an error occurred during initialization or chat.
           // Or if an error occurs during chat interaction.
           if (_initializationError != null) _buildErrorBanner(_initializationError!),
           Expanded(
