@@ -218,27 +218,38 @@ final settingsFutureProvider = FutureProvider<SettingsState>((ref) async {
 /// Main settings provider that maintains the current settings state
 /// Provides access to settings values and methods to modify them
 final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>((ref) {
-  // Watch the future provider. When it completes, its data is used.
-  ref.watch(settingsFutureProvider);
+  // Get the asynchronously loaded initial state from the future provider
+  final asyncInitialState = ref.watch(settingsFutureProvider);
+  final prefs = ref.watch(sharedPreferencesProvider); // Get prefs instance needed for the notifier
 
-  // Provide a temporary/loading state until the future completes
-  // This requires SettingsNotifier to handle an initial dummy state or for loadInitialState to be synchronous (which it isn't)
-  // A common pattern is to make the UI handle the loading state from settingsFutureProvider
-  // For the notifier itself, we need the prefs instance.
-  final prefs = ref.watch(sharedPreferencesProvider); // Get prefs synchronously
-
-  // Return the notifier, initialized with a default state.
-  // The actual loaded state will be available via settingsFutureProvider or by watching settingsProvider itself AFTER the future completes.
-  // The initial state here might be slightly out of sync until the future loads, but allows access to methods.
-  // Use the synchronous fallback for the initial state here.
-  return SettingsNotifier(
-      prefs,
-      SettingsState(
-        alias: SettingsNotifier._generateDefaultAliasSyncFallback(), // Use sync fallback for initial state
-        useBiometricAuth: false,
-        favoriteDevices: [],
-        destinationDir: null,
-      ));
+  // Use AsyncValue.when to handle loading/error states and provide the loaded state
+  // This ensures the notifier is initialized with the correct state once loaded.
+  return asyncInitialState.when(data: (initialState) {
+    // Once data is loaded, initialize the notifier with it
+    return SettingsNotifier(prefs, initialState);
+  }, loading: () {
+    // While loading, initialize the notifier with a default/fallback state
+    _logger.info("Settings loading... Initializing notifier with fallback state.");
+    return SettingsNotifier(
+        prefs,
+        SettingsState(
+          alias: SettingsNotifier._generateDefaultAliasSyncFallback(),
+          useBiometricAuth: false, // Use default during load
+          favoriteDevices: [],
+          destinationDir: null,
+        ));
+  }, error: (err, stack) {
+    // If loading fails, log the error and initialize with a default/fallback state
+    _logger.severe("Error loading initial settings: $err", err, stack);
+    return SettingsNotifier(
+        prefs,
+        SettingsState(
+          alias: SettingsNotifier._generateDefaultAliasSyncFallback(),
+          useBiometricAuth: false, // Use default on error
+          favoriteDevices: [],
+          destinationDir: null,
+        ));
+  });
 });
 
 /// Provides convenient access to just the device alias

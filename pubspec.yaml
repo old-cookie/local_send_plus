@@ -1,7 +1,7 @@
 name: local_send_plus
 description: ITP4217 Emerging Technology in Mobile Computing and Intelligent Systems EA project.
 publish_to: 'none'
-version: 3.0.0
+version: 3.2.0
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

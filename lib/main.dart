@@ -6,7 +6,7 @@ import 'package:local_send_plus/pages/auth_page.dart';
 import 'package:local_send_plus/providers/settings_provider.dart';
 import 'package:local_send_plus/services/theme_service.dart';
 import 'package:encrypt_shared_preferences/provider.dart';
-import 'package:local_send_plus/features/security/custom_encryptor.dart'; // Import the custom encryptor
+import 'package:local_send_plus/features/security/custom_encryptor.dart';
 
 /// A record type that represents the complete theme state of the application.
 /// Contains the current theme mode and both light and dark theme data.
@@ -67,8 +67,10 @@ class ThemeStateNotifier extends StateNotifier<ThemeState> {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Initialize EncryptedSharedPreferencesAsync with CustomEncryptor
-  final key = "localsendplusmax"; // Placeholder key - replace with secure key management
+  final key = "localsendpluslocalsendpluslocal1";
   await EncryptedSharedPreferencesAsync.initialize(key, encryptor: CustomEncryptor());
+  // Also initialize the legacy API to potentially satisfy internal checks
+  await EncryptedSharedPreferences.initialize(key, encryptor: CustomEncryptor());
   final prefsInstance = EncryptedSharedPreferencesAsync.getInstance();
   runApp(ProviderScope(
     overrides: [sharedPreferencesProvider.overrideWithValue(prefsInstance)],
@@ -82,17 +84,39 @@ class MyApp extends ConsumerWidget {
   const MyApp({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bool useBiometrics = ref.watch(biometricAuthProvider);
-    // Watch the new theme state provider
+    // Watch the future provider to ensure settings are loaded
+    final settingsAsyncValue = ref.watch(settingsFutureProvider);
+    // Watch the theme state provider
     final themeState = ref.watch(themeStateNotifierProvider);
-
-    return MaterialApp(
-      title: 'LocalSend Plus',
-      // Use themes from the state record
-      theme: themeState.lightTheme,
-      darkTheme: themeState.darkTheme,
-      themeMode: themeState.mode,
-      home: useBiometrics ? const AuthPage() : const HomePage(),
+    // Use AsyncValue.when to handle loading/error states for settings
+    return settingsAsyncValue.when(
+      data: (settings) {
+        // Settings loaded successfully
+        final bool useBiometrics = settings.useBiometricAuth;
+        return MaterialApp(
+          title: 'LocalSend Plus',
+          theme: themeState.lightTheme,
+          darkTheme: themeState.darkTheme,
+          themeMode: themeState.mode,
+          home: useBiometrics ? const AuthPage() : const HomePage(),
+        );
+      },
+      loading: () {
+        // Show a loading indicator while settings are loading
+        return const MaterialApp(
+          home: Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+        );
+      },
+      error: (err, stack) {
+        // Show an error message if settings fail to load
+        return MaterialApp(
+          home: Scaffold(
+            body: Center(child: Text('Error loading settings: $err')),
+          ),
+        );
+      },
     );
   }
 }
